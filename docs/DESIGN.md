@@ -100,7 +100,7 @@ The pilot client receives full SSE snapshots. Keep the director authoritative an
 
 See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
 
-### Board theme for Phase 0
+### Board and piece theme for Phase 0
 
 The planned default uses the metal board in the two supplied references. The pilot captures in this repository show the earlier ivory-and-walnut board. Phase 0 applies the new treatment to the large actual board, the smaller actual board during a spotlight, the analysis board and the control-room preview. The fixed clock strip, engine sheets, played-move strip and broadcast labels retain their existing positions.
 
@@ -113,6 +113,8 @@ The planned default uses the metal board in the two supplied references. The pil
 | Coordinates | Set files along the bottom edge and ranks along the left. Use dark ink on silver and light ink on graphite. Recheck contrast over the tint. | Reserve an inset clear of seams and fasteners. Coordinates must stay clear of adjacent corners and pieces. |
 
 **Rendering.** Extend the existing SVG board in `src/client/board.ts`. Its 800-unit view box already places eight 100-unit cells on each axis. Reuse that geometry and each board’s existing `BoardFrame` for piece positions and the two highlight squares. Layer square bases, static textures, highlights, pieces and coordinates in that order. Use role-specific IDs for definitions when actual and analysis SVGs share a page. A local SVG pattern or a small repeatable local image is sufficient for grain. Keep its origin fixed between snapshots so an idle position remains visually still. Ship original or appropriately licensed local artwork and retain its attribution when required.
+
+**Piece renderer.** Map the existing `BoardFrame.pieces` entries (side, type and square) to local SVG symbols or paths with a shared view box, optical baseline and side bearings. White and Black use the same silhouette landmarks, with colour-specific outlines and internal details. Reuse the set on both boards and in the operator preview. Font availability must have no effect on the set’s appearance. Keep the accessible board label, FEN and last-move highlights independent of artwork. The [Phase 0 piece table](PHASED_PLAN.md#0-metal-board-and-matching-chess-pieces) describes the six silhouettes and the required 24-sample comparison.
 
 **A36 review evidence.** Capture a populated position that includes all six piece types and a sparse position with visible source and destination squares. Include the 768 px actual board, the 416 px actual board and the 768 px analysis board across captures at 1920 × 1080 and 1280 × 720. During playback, the actual board retains its last played move while the analysis board highlights each hypothetical ply. On interruption both the actual pieces and their highlights must show the newly played move on the first eligible frame. Inspect a scaled capture for coordinate and piece legibility. At the OBS rehearsal, inspect a short 30 fps recording for grain shimmer or blocking on static squares; reduce texture contrast or simplify the small board if either appears. Browser screenshots provide the review evidence for Phase 0 and the encoded recording belongs to the broadcast sign-off phase.
 

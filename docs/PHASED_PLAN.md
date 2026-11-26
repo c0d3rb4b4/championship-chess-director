@@ -1,6 +1,6 @@
 # Championship Chess Director delivery plan
 
-Start with **Phase 0, the metal board**, to review the new visual direction against a working demo. Then use Phase 1 to reacquire analysis after a real move. Phase 0 is independent of the engine work, so Phases 1–5 keep their existing numbers and dependencies.
+Start with **Phase 0, the metal board and matching piece set**, to review the new visual direction against a working demo. Then use Phase 1 to reacquire analysis after a real move. Phase 0 is independent of the engine work, so Phases 1–5 keep their existing numbers and dependencies.
 
 [Product requirements](Live_Chess_Broadcast_UI_PRD.docx) · [Technical design](DESIGN.md) · [Demo implementation](DEMO_SLICE.md) · [Review captures](evidence/README.md)
 
@@ -20,7 +20,7 @@ Start with **Phase 0, the metal board**, to review the new visual direction agai
 
 | Slice | Depends on | Output to review |
 |---|---|---|
-| 0. Metal board theme | Current fixture pilot | Review opening and sparse endgame positions on silver and graphite boards. Inspect actual and hypothetical last-move highlights independently. |
+| 0. Metal board and twelve chess pieces | Current fixture pilot | Review the silver and graphite board, the twelve White/Black vector pieces, and a compact-board capture side by side with the reference. |
 | 1. Multiple analysed positions | Current fixture pilot | Play 10.d4, watch each source update independently, then play a Black reply. |
 | 2. Statistics and rotation | Slice 1 for move boundaries | Watch WDL, search work and history advance across real moves with the actual board and clocks anchored. |
 | 3. Validate provider contracts (M0) | Independent of slices 1–2 | Replay captured packets offline into typed observations and inspect field provenance. |
@@ -32,11 +32,24 @@ Start with **Phase 0, the metal board**, to review the new visual direction agai
 
 Deliver one selected phase per pull request. Use the numbered steps within that branch as implementation and verification checkpoints. Preserve one working programme at each merge. The core gates have distinct owners in code: adapters establish field meanings, the server decides what is eligible, and the browser renders the released snapshot.
 
-### 0. Metal board theme
+### 0. Metal board and matching chess pieces
 
 **Target.** The two reference views show the same board in an opening and a sparse endgame. Light squares resemble brushed silver plates with faint vertical grain and tiny fasteners just inside the corners. Dark graphite squares carry a quieter diagonal abrasion pattern. Coordinates reverse tone at the edge. The last move leaves a desaturated blue-grey tint on both the origin and destination. White pieces have an opaque light body with a strong dark outline. Black silhouettes have light internal cuts that distinguish the pieces even against graphite.
 
 **Implementation.** Start with the shared SVG board in `src/client/board.ts` and its piece and coordinate styling in `src/client/styles.css`. Give actual and analysis boards the same material and piece set. Scope SVG definitions per board instance. Render the last-move tint from each board’s own frame. Keep grain stationary and fasteners subordinate to the pieces. At the 416 px size, reduce texture detail first. Use locally bundled, reproducible artwork with recorded provenance. The fixed clocks, scorecard and played-move strip already provide the surrounding broadcast layout.
+
+**Piece artwork.** Deliver a locally bundled two-colour set alongside the square treatment. The current implementation draws the six Unicode symbols with a system font. Replace that piece-rendering path with deterministic vector artwork keyed by side and piece type. White pieces have opaque white bodies and bold black contours. Black pieces have solid dark bodies with deliberate white cuts in the face, crown or collars. A pawn can stay solid. The pieces themselves are flat ink drawings; the brushed finish belongs to the squares.
+
+| Piece | Shape to match in both colours |
+|---|---|
+| Pawn | Small round head, rounded collar, flared bell-shaped body and flat foot. |
+| Knight | Left-facing horse in both colours, two pointed ears, a cut-in muzzle and sweeping mane. Keep the eye and mane legible. |
+| Bishop | Ball finial above a pointed mitre with a central cross, banded collar and a split, sweeping foot. |
+| Rook | Square battlements, narrow straight tower shaft and broad stepped plinth. |
+| Queen | Five splayed crown points with round tips, narrowing into a band above a broad base. |
+| King | A cross above a three-lobed crown, with a broad banded base. The crown must be recognisable beside the queen at miniature size. |
+
+**Piece review.** Use the [opening-position reference](reference/metal-board-and-pieces.png) to compare the major pieces across the back ranks and the pawn banks. Include a contact sheet in the implementation PR showing each of the twelve pieces on both silver and graphite (24 samples). Include a compact-size sample as well as in-game captures: the 416 px board becomes roughly 35 px per square at 720p. Inspect the bishop’s mitre, the king’s cross, the queen’s points and the knight’s profile at that size. Source and attribute suitable vector assets, or draw original ones. The screenshot is visual reference; the runtime loads local piece assets. Completion requires the surface, pieces and in-game evidence together.
 
 **Exit evidence (A36 alongside A01, A27 and A29–33).** Capture the large board in a crowded opening and a sparse endgame, then capture the 416 px actual board beside the 768 px analysis board. Review at 1920 × 1080 and 1280 × 720. Check all twelve piece silhouettes on both square colours, edge-coordinate contrast and a last move on each colour. Advance the hypothetical line and confirm that only its board changes highlights. Release an actual move during the line and rerun the existing interruption and reduced-motion tests. Retain the captures for PR review. Phase 6 adds the encoded OBS check for texture shimmer. The current pilot captures document the walnut baseline until this phase lands.
 
@@ -116,7 +129,7 @@ Record the result and evidence for the game-only presentation and planned v1.3 b
 | A33 · Played strip | Release 10.d4 once. Exactly one ply appears; a PV step, manual return and browser refresh add zero. |
 | A34 · Outcome semantics | Validate all three fixture percentages, a legitimate zero, absence of WDL and an old-root message. Labels and eligibility must survive updates. |
 | A35 · Degraded state | Hold one source behind, disconnect the programme and reconnect. Only the appropriate status appears on air; technical recovery detail stays in the control room. |
-| A36 · Metal board | Compare opening and endgame at full and compact sizes. Inspect origin and destination tints, edge coordinates, piece detail and stable grain in the encoded recording. |
+| A36 · Board and piece set | Review the 24 piece/square combinations, opening and endgame at full and compact sizes, and the two independent last-move tints. Inspect grain stability in the encoded recording. |
 
 Sign off A26–36 alongside the earlier slice evidence. Until the live feed and host checks pass, retain the DEMO/REPLAY identifier on fixture or recorded output.
 
@@ -134,7 +147,7 @@ Implement phase NEXT of docs/PHASED_PLAN.md in c0d3rb4b4/championship-chess-dire
 
 Start from current main. Read the selected phase, its dependencies and exit criteria, the relevant parts of docs/DESIGN.md and the PRD in docs/, and inspect the current code and tests. Check merged work and open PRs first. Reuse an open phase branch, or create a fresh branch for the outstanding work. If the phase is already complete, give me its PR link.
 
-Implement the selected phase end to end. Keep the programme focused on the actual game, labelled analysis and stats. Run the repo’s typecheck, build, Node and browser tests plus the phase-specific checks. For visible changes, inspect 1080p and 720p captures and include them in the PR. Record what passed and any evidence that still needs a live feed, OBS host or viewer session.
+Implement the selected phase end to end. For Phase 0, deliver both the brushed-silver/graphite squares and all twelve reference-style vector pieces, with a 24-sample piece sheet and full/compact in-game captures. Keep the programme focused on the actual game, labelled analysis and stats. Run the repo’s typecheck, build, Node and browser tests plus the phase-specific checks. For visible changes, inspect 1080p and 720p captures and include them in the PR. Record what passed and any evidence that still needs a live feed, OBS host or viewer session.
 
 Update the phase progress in the plan, commit and push the work, and open or update the PR. Leave it open for review. Return the PR link, what I should inspect and any outstanding acceptance checks.
 ```
