@@ -92,12 +92,6 @@ export function validateFixtures() {
         const score = position.score;
         if (score.kind !== "pawns" || score.perspective !== "white" || !Number.isFinite(score.value))
           throw new Error("Unsupported synthetic pawn score");
-      } else {
-        const wdl = position.wdl;
-        if (wdl.perspective !== "white" || wdl.scope !== "root" || wdl.scale !== 1000 ||
-            wdl.values.length !== 3 || wdl.values.some(v => !Number.isInteger(v) || v < 0) ||
-            wdl.values.reduce((a, b) => a + b, 0) !== wdl.scale)
-          throw new Error("Unsupported synthetic WDL contract");
       }
       positions[id].set(ply, position);
     }

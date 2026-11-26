@@ -37,3 +37,11 @@ Black thinks for 27 seconds and receives a 30-second increment. At the reply the
 To rehearse a different opening, edit the mainline and both root histories together. Supply legal continuations at that position, check both clocks and change the interruption deadlines in the tests if the scenario calls for different timing. An edited fixture is still synthetic. Production captures, their provenance and their protocol versions belong to the adapter validation phase.
 
 The current replay starts at the standard initial position. The post-move White anchor is 3,127,000 ms: 3,180,000 ms initial time minus an 83-second think plus the 30-second increment. Playback of the engine line consumes none of either player’s recorded time.
+
+## Phase 2 statistics rehearsal
+
+The initial comparison runs from 0–20 s, Leela outcomes from 20–38 s, time investment from 38–58 s and search from 58–74 s. History appears at 74 s, followed by the existing variation cue at 75 s. At 156 s the history panel contains two frozen positions and a gap at Black’s reply.
+
+All work counters are synthetic. Stockfish reports nodes and Leela reports visits. The repeated Leela packet at 1.5 s carries no new work. At 6 s the displayed candidates account for 68,400 of 95,000 visits. The remaining 26,600 appear as Other (28%). The second root supplies a side-to-move tuple on Black’s turn.
+
+The clock records are the mover’s post-move readings in milliseconds, including any increment, period addition and signed clock adjustment. Missing readings interrupt that player’s series. The initial partial history supports completed durations beginning at move 6. Historical points retain source observation time and version, position identity, game revision and the cutoff used for analysis age.

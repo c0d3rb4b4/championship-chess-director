@@ -30,6 +30,10 @@ export interface EngineView {
   scoreLabel: string;
   depth?: number;
   work?: number;
+  workUnit?: "nodes" | "visits";
+  workDelta?: number;
+  visitShares?: { san: string; percent: number }[];
+  conditionalSan?: string;
   candidates: Candidate[];
   wdl?: [number, number, number];
 }
@@ -65,6 +69,9 @@ export interface ProgrammeSnapshot {
   clocks: { whiteMs: number; blackMs: number };
   engines: EngineView[];
   scene: Scene;
+  panel: Panel;
+  moveTimes: MoveTime[];
+  history: HistoryRow[];
   ticker: string;
 }
 export interface OperatorSnapshot {
@@ -78,4 +85,20 @@ export interface OperatorSnapshot {
   journalEntries: number;
   timeControl: string;
   providerContract: string;
+}
+
+export type Panel = "comparison" | "outcomes" | "time" | "search" | "history";
+export interface MoveTime {
+  ply: number;
+  san: string;
+  elapsedMs: number | null;
+}
+export interface HistoryRow {
+  ply: number;
+  san: string;
+  rootKey: string;
+  revision: number;
+  sesse?: { pawns: number; observedMs: number; version: number };
+  leela?: { percentages: [number, number, number]; observedMs: number; version: number };
+  cutoffMs: number;
 }

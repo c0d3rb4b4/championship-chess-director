@@ -354,3 +354,27 @@ p {
   .inspector { border: 0; padding-left: 0; }
   .inspector > section { max-width: 34em; }
 }
+
+.stat-panel { background: #1c1c1b; padding: 38px 44px; font-variant-numeric: tabular-nums; }
+.stat-panel h2 { font-size: 58px; line-height: 1.1; border-bottom: 2px solid #74756e; padding-bottom: 24px; }
+.stat-sub, .axis-label, .work small { font-size: 24px; color: #c1c5bf; }
+.stat-sub { margin: 28px 0 80px; }
+.stat-panel .wdl { width: 100%; }
+.stat-panel .wdl-values { justify-content: space-between; }
+.stat-panel .wdl-values strong { font-size: 76px; color: var(--paper); }
+.stat-panel .wdl-values span { font-size: 28px; color: #c1c5bf; }
+.stat-panel .wdl-bar { height: 34px; border: 1px solid #777; }
+.time-totals, .shares, .legend { display: flex; gap: 32px; }
+.time-totals { padding: 40px 0; }
+.time-totals div { flex: 1; display: grid; gap: 12px; font-size: 25px; }
+.time-totals strong, .work strong { font-size: 48px; }
+.stat-chart { margin-top: 24px; }
+.stat-chart svg { display: block; width: 100%; fill: #e5e5dd; font: 21px sans-serif; }
+.legend { font-size: 24px; }
+.legend span::before { display: inline-block; content: ""; width: 20px; height: 4px; background: var(--line); margin-right: 10px; vertical-align: middle; }
+.axis-label { text-align: center; }
+.work { padding: 28px 0; border-bottom: 1px solid #51524f; }
+.work h3 { font-size: 34px; }
+.work p { font-size: 28px; margin: 10px 0; }
+.work p span { float: right; }
+.shares { margin-top: 20px; font-size: 24px; }

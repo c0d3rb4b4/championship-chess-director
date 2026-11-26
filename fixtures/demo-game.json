@@ -27,9 +27,21 @@
     "h6"
   ],
   "clocks": { "whiteMs": 3180000, "blackMs": 4860000 },
+  "postMoveClocks": [
+    { "ply": 10, "bonusMs": 0, "adjustmentMs": 0, "postMs": 5100000 },
+    { "ply": 11, "bonusMs": 0, "adjustmentMs": 0, "postMs": 3650000 },
+    { "ply": 12, "bonusMs": 0, "adjustmentMs": 0, "postMs": 5060000 },
+    { "ply": 13, "bonusMs": 0, "adjustmentMs": 0, "postMs": 3420000 },
+    { "ply": 14, "bonusMs": 0, "adjustmentMs": 0, "postMs": 4990000 },
+    { "ply": 15, "bonusMs": 0, "adjustmentMs": 0, "postMs": 3290000 },
+    { "ply": 16, "bonusMs": 0, "adjustmentMs": 0, "postMs": 4930000 },
+    { "ply": 17, "bonusMs": 0, "adjustmentMs": 0, "postMs": 3180000 },
+    { "ply": 18, "bonusMs": 0, "adjustmentMs": 0, "postMs": 4860000 }
+  ],
+  "incrementMs": 30000,
   "events": [
-    { "atMs": 83000, "san": "d4", "whiteMs": 3127000, "blackMs": 4860000 },
-    { "atMs": 110000, "san": "exd4", "whiteMs": 3127000, "blackMs": 4863000 }
+    { "atMs": 83000, "san": "d4", "bonusMs": 0, "adjustmentMs": 0, "whiteMs": 3127000, "blackMs": 4860000 },
+    { "atMs": 110000, "san": "exd4", "bonusMs": 0, "adjustmentMs": 0, "whiteMs": 3127000, "blackMs": 4863000 }
   ],
   "timeControl": "90 min + 30 s / move · fixture clock anchors",
   "spotlightAtMs": 75000

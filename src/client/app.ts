@@ -1,3 +1,4 @@
+import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
 import type {
   Command,
@@ -41,7 +42,7 @@ function outcomeEstimate(values: [number, number, number]): string {
 
 function engineSheet(engine: EngineView): string {
   const stats = engine.wdl
-    ? outcomeEstimate(engine.wdl)
+    ? (engine.conditionalSan ? `<span>After ${e(engine.conditionalSan)}</span>` : "") + outcomeEstimate(engine.wdl)
     : engine.id === "sesse" && engine.candidates.length
       ? `<div class="pawn-score"><span>White eval · pawns</span><strong>${e(engine.score)}</strong></div>`
       : "";
@@ -76,9 +77,16 @@ function recentMoves(s: ProgrammeSnapshot): string {
   }
   return rows.join("");
 }
+function supportingPanel(s: ProgrammeSnapshot): string {
+  const waiting = s.engines.every(engine => engine.status === "Updating for this position");
+  return s.panel !== "comparison" ? statisticsPanel(s, outcomeEstimate) : waiting
+      ? `<div class="pending-panel"><div class="last-move"><span>Last move</span><strong>${e(s.actual.moveLabel)}</strong></div>
+           <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
+      : s.engines.map(engineSheet).join("");
+}
 function programme(s: ProgrammeSnapshot): string {
   const spotlight = s.scene.kind === "spotlight";
-  const waiting = s.engines.every(engine => engine.status === "Updating for this position");
+
   const index = s.scene.frameIndex ?? 0;
   let scene: string;
   if (spotlight) {
@@ -95,13 +103,9 @@ function programme(s: ProgrammeSnapshot): string {
           `<li${i + 1 === index ? ' class="current" aria-current="step"' : ""}>${e(frame.moveLabel)}</li>`
         ).join("")}</ol></aside>`;
   } else {
-    const supporting = waiting
-      ? `<div class="pending-panel"><div class="last-move"><span>Last move</span><strong>${e(s.actual.moveLabel)}</strong></div>
-           <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
-      : s.engines.map(engineSheet).join("");
     scene = `<section class="large-actual"><h2 class="board-slug">Actual game</h2>
              <div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
-             <section class="comparison-panel" aria-label="Engine analysis">${supporting}</section>`;
+             <section class="comparison-panel" aria-label="Engine analysis">${supportingPanel(s)}</section>`;
   }
   return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
     <header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
@@ -117,21 +121,31 @@ function resizeProgramme(): void {
       String(Math.min(innerWidth / 1920, innerHeight / 1080)),
     );
 }
+let renderedRoot = "";
+let renderedKind = "";
+let renderedInstance = "";
 function renderProgramme(s: ProgrammeSnapshot): void {
-  const key = JSON.stringify([
-    s.scene.instance,
-    s.scene.frameIndex,
-    s.engines,
-  ]);
+  const key = JSON.stringify([s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
+    s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
   if (key !== renderKey) {
-    const previousScene = app.querySelector<HTMLElement>(".programme")?.dataset.scene;
+    const transition = renderedInstance && renderedInstance !== s.scene.instance;
     renderKey = key;
-    app.innerHTML = programme(s);
-    // Reveal incoming supporting graphics once per scene. Old PV nodes leave immediately.
-    if (connected && !recovering && previousScene && previousScene !== s.scene.kind) {
-      app.querySelector(".programme")?.classList.add("scene-enter");
+    const main = app.querySelector<HTMLElement>(".programme");
+    const panel = main?.querySelector(".comparison-panel");
+    if (main && panel && renderedKind === s.scene.kind && renderedRoot === s.game.rootKey) {
+      panel.innerHTML = supportingPanel(s);
+      main.dataset.instance = s.scene.instance;
+    } else {
+      app.innerHTML = programme(s);
+      resizeProgramme();
     }
-    resizeProgramme();
+    if (connected && !recovering && transition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      app.querySelector(".comparison-panel, .variation-rail")?.animate(
+        [{opacity: .65, transform: "translateY(8px)"}, {opacity: 1, transform: "none"}], {duration: 240});
+    }
+    renderedKind = s.scene.kind;
+    renderedRoot = s.game.rootKey;
+    renderedInstance = s.scene.instance;
   }
   for (const [color, ms] of [
     ["w", s.clocks.whiteMs],
