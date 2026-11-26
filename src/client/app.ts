@@ -25,8 +25,8 @@ function clock(ms: number): string {
 function shortTime(ms: number): string {
   return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 }
-function players(s: ProgrammeSnapshot, compact = false): string {
-  return `<div class="players ${compact ? "compact" : ""}">
+function players(s: ProgrammeSnapshot): string {
+  return `<div class="players">
     <div class="player ${s.game.turn === "w" ? "running" : ""}"><span class="player-name"><i class="player-piece white-dot"></i>${e(s.game.white)}</span><strong data-clock="w">${clock(s.clocks.whiteMs)}</strong></div>
     <div class="player ${s.game.turn === "b" ? "running" : ""}"><span class="player-name"><i class="player-piece black-dot"></i>${e(s.game.black)}</span><strong data-clock="b">${clock(s.clocks.blackMs)}</strong></div>
   </div>`;
@@ -56,10 +56,10 @@ function programme(s: ProgrammeSnapshot): string {
   const spotlight = s.scene.kind === "spotlight";
   const index = s.scene.frameIndex ?? 0;
   return `<main class="programme ${spotlight ? "spotlight" : ""}" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
-    <header class="programme-header"><div><h1><span class="brand-icon">♞</span>${e(s.game.event)}</h1><p>${e(s.game.round)}<span class="separator">/</span>ACTUAL GAME · ${s.game.turn === "w" ? "WHITE" : "BLACK"} TO MOVE · after ${e(s.actual.moveLabel)}</p></div><div class="broadcast-label"><span class="demo-badge">DEMO</span><span>Fictional game · fixture analysis</span></div></header>
+    <header class="programme-header"><div><h1>${e(s.game.event)}</h1><p>${e(s.game.round)}<span class="separator">/</span>ACTUAL GAME · ${s.game.turn === "w" ? "WHITE" : "BLACK"} TO MOVE · after ${e(s.actual.moveLabel)}</p></div><div class="broadcast-label"><span class="demo-badge">DEMO</span>${players(s)}</div></header>
     ${
       spotlight
-        ? `<section class="mini-actual"><h2>ACTUAL GAME</h2><p class="actual-caption">Position after ${e(s.actual.moveLabel)}</p><div class="mini-board">${board(s.actual, "actual")}</div>${players(s, true)}<div class="think-caption"><span class="thinking-indicator"></span>${s.game.turn === "w" ? "White" : "Black"} is still thinking.</div><p class="mini-note">The actual game stays here.<br>A played move interrupts this line.</p></section>
+        ? `<section class="mini-actual"><h2>ACTUAL GAME</h2><p class="actual-caption">Position after ${e(s.actual.moveLabel)}</p><div class="mini-board">${board(s.actual, "actual")}</div><div class="think-caption"><span class="thinking-indicator"></span>${s.game.turn === "w" ? "White" : "Black"} is still thinking.</div><p class="mini-note">The actual game stays here.<br>A played move interrupts this line.</p></section>
       <section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2><div class="analysis-board" data-frame="${index}">${board(s.scene.frames![index], "analysis")}</div></section>
       <aside class="variation-rail sesse"><span class="eyebrow">POSSIBLE CONTINUATION</span><h2>Stockfish idea</h2><p>From the actual position<br>after ${e(s.actual.moveLabel)}</p><ol>${s.scene
         .frames!.slice(1)
@@ -70,13 +70,13 @@ function programme(s: ProgrammeSnapshot): string {
         .join(
           "",
         )}</ol><div class="rail-footer"><strong>Frozen legal line</strong><span>${index === 0 ? "Root position" : `Ply ${index} of ${s.scene.frames!.length - 1}`}</span><span>Sesse · synthetic fixture</span></div></aside>`
-        : `<section class="large-actual">${players(s)}<div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
+        : `<section class="large-actual"><h2 class="board-slug">Actual game</h2><div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
       <div class="summary-row">${s.engines.map(engineSummary).join("")}</div>
-      <section class="comparison-panel"><div class="panel-title"><h2>${s.scene.kind === "actual-move" ? "A move on the board" : "Two engines. Two ideas."}</h2><span>${s.scene.kind === "actual-move" ? "ACTUAL MOVE" : "ENGINE CHOICES"}</span></div>
+      <section class="comparison-panel"><div class="panel-title"><h2>${s.scene.kind === "actual-move" ? "A move on the board" : "Engine comparison"}</h2><span>${s.scene.kind === "actual-move" ? "ACTUAL MOVE" : "ENGINE CHOICES"}</span></div>
       ${s.scene.kind === "actual-move" ? `<div class="move-announcement"><span class="move-number">10.</span><strong>d4</strong><p>White opens the centre.</p><span>Analysis playback interrupted · actual board restored</span></div><div class="pending-strip">Sesse and Leela · Updating for this position</div>` : `<div class="engine-columns">${s.engines.map(engineColumn).join("")}</div><p class="panel-disclaimer">${s.game.ply > 18 ? "The actual board has advanced. Previous-position analysis is hidden." : "Illustrative engine choices · hypothetical moves, not player predictions"}</p>`}
       </section>`
     }
-    <footer class="ticker"><span>${spotlight ? "ACTUAL GAME CONTINUES" : s.scene.kind === "actual-move" ? "MOVE PLAYED" : "THE CLASSICAL ROOM"}</span><p>${e(s.ticker)}</p></footer>
+    <footer class="ticker"><span>${spotlight ? "ACTUAL GAME CONTINUES" : s.scene.kind === "actual-move" ? "MOVE PLAYED" : "GAME NOTES"}</span><p>${e(s.ticker)}</p></footer>
     <div class="connection-banner" ${connected ? "hidden" : ""}>DEMO · CONNECTION INTERRUPTED · last confirmed board · clocks paused</div>
   </main>`;
 }
@@ -94,8 +94,13 @@ function renderProgramme(s: ProgrammeSnapshot): void {
     s.engines.map((x) => [x.status, x.depth]),
   ]);
   if (key !== renderKey) {
+    const previousScene = app.querySelector<HTMLElement>(".programme")?.dataset.scene;
     renderKey = key;
     app.innerHTML = programme(s);
+    // Reveal incoming supporting graphics once per scene. Old PV nodes leave immediately.
+    if (connected && !recovering && previousScene && previousScene !== s.scene.kind) {
+      app.querySelector(".programme")?.classList.add("scene-enter");
+    }
     resizeProgramme();
   }
   for (const [color, ms] of [

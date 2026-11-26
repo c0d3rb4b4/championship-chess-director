@@ -1,0 +1,18 @@
+# From the pilot to the first live broadcast
+
+Baseline: main at `8ce0fd9`, the merged deterministic DEMO. Start every phase on a branch from the preceding merged work. Keep the fixture routes usable for design reviews throughout.
+
+| Phase | Work and dependency | Deliverable and exit test |
+|---|---|---|
+| 1 · Broadcast graphics | Build on the existing fixed canvas, shared snapshots and validated PV frames. Restyle the board and engine areas, anchor clocks in one score strip, and differentiate on-air cuts from panel entrances. This PR provides the first implementation. | Compare thinking, spotlight and interrupted captures at 1080p and 720p. Rehearse reduced motion, interruption mid-entrance and two simultaneous viewers (A01, A27, A29–31). |
+| 2 · Complete the graphics rehearsal | After phase 1, extend the fixture timeline to include WDL, recent moves, search progress, time investment, evaluation history and a confirmed result. Replace fixture-specific move text with released game fields. Add a reviewed ticker queue, regional transitions and profile-controlled cadence. | Record an uninterrupted rotation plus rapid moves and time trouble. Force each missing-data case. Five viewers can identify the actual board, turn and hypothetical status within five seconds. A05–13, A23, A29–31. |
+| 3 · Prove both feeds (M0) | Can start alongside phase 2. Capture current Sesse full/delta payloads and Leela subscription messages. Bind event, round, colours and authority, and verify WDL perspective, scale, scope and search-share denominator. Save replayable contracts. | Replay lost bases, duplicate messages, unrelated events and wrong histories. Document unsupported fields and evidence for each enabled panel. A03–04, A07–09, A14, A17–18. |
+| 4 · Drive the programme from released live state | Requires verified adapters. Add the durable receipt journal and delayed projection ahead of the existing director. Implement correction, reconnection, authoritative result, HOLD, schedule and profile operations. Bind graphics from phase 2 to this projection. | Replay a 60-second delay with a future move buffered, refresh both viewers, fail each source and correct an earlier move. Compare every visible surface before and after release. A02–04, A19–25. |
+| 5 · OBS dress rehearsal and launch | Requires phases 2–4. Tune stability, rolling board share, cooldown and text scale on recorded full games. Inspect actual encoded capture alongside browser measurements. | Eight hours with bounded resources, no manual direction and no stale callbacks. Review ten minutes at 30 fps for >1% frame loss, verify A01–A28 applicable to P0 and close A29–31. Record host, viewport and evidence. |
+| 6 · Editorial extensions | After P0, add corpus-bound opening departures, immutable pre-move choice records and critical-moment recaps. | Each claim has provenance, timing evidence and a tested suppression path (A15–16). |
+
+## Review sequence
+
+The pilot already delivers fixture validation, history-bound root keys, legal frozen playback, an SQLite checkpoint, SSE resnapshot, loopback controls and a two-viewer interruption test. Its single automatic long think starts the spotlight at 75 seconds and releases 10.d4 at 83 seconds. The original recorded 131 ms measurement covers operator click through browser paint. Measure OBS separately.
+
+For the next PR, extend only the DEMO to show the Leela outcome layout: use the existing fixture tuple, show White/Draw/Black with scope and percentages, rotate into the panel while the actual board stays large, and cut back on a released move. Capture both viewport sizes. This gives the broader phase 2 work an independently reviewable first change.

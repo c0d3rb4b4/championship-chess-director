@@ -158,3 +158,22 @@ test("an interrupted connection retains the last board, freezes clocks and shows
     timeout: 10000,
   });
 });
+
+test("reduced-motion spotlight cuts keep the real clock strip anchored", async ({ page, context }) => {
+  await page.goto("/operator");
+  await page.getByRole("button", { name: "Restart demo" }).click();
+  await expect(page.getByRole("status")).toContainText("Demo restarted");
+  const viewer = await context.newPage();
+  await viewer.emulateMedia({ reducedMotion: "reduce" });
+  await viewer.goto("/programme");
+  const strip = viewer.locator(".programme-header .players");
+  await expect(strip).toBeVisible();
+  const bounds = await strip.boundingBox();
+  await page.getByRole("button", { name: "Cue variation" }).click();
+  await expect(viewer.locator(".variation-rail")).toHaveCSS("animation-name", "none");
+  expect(await strip.boundingBox()).toEqual(bounds);
+  await page.getByRole("button", { name: "Play actual move" }).click();
+  await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move");
+  await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);
+  expect(await strip.boundingBox()).toEqual(bounds);
+});
