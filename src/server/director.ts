@@ -7,7 +7,11 @@ import {
   validateFixtures,
   variationFrames,
 } from "./fixtures.js";
+import { FixtureHistory } from "./history.js";
+import { duration, outcomes, selectPanel, workProgress } from "./statistics.js";
 import type {
+  Panel,
+  MoveTime,
   Command,
   EngineId,
   EngineView,
@@ -29,6 +33,7 @@ export const SPOTLIGHT_DURATION_MS = 22000; // 2 s root + 8 × 2 s plies + 4 s e
 /** One server-owned, deterministic state machine. Clients never schedule PV callbacks. */
 export class Director {
   private state: DirectorState;
+  private historical = new FixtureHistory();
   private readonly positions = validateFixtures();
   constructor(checkpoint?: DirectorState) {
     this.state = checkpoint
@@ -48,6 +53,7 @@ export class Director {
   }
   restore(state: DirectorState): void {
     this.state = structuredClone(state);
+    this.historical = new FixtureHistory();
   }
   advanceTo(elapsedMs: number): ProgrammeSnapshot {
     if (!Number.isFinite(elapsedMs) || elapsedMs < this.state.elapsedMs)
@@ -58,6 +64,7 @@ export class Director {
   command(command: Command): ProgrammeSnapshot {
     if (command === "restart") {
       this.state.epoch++;
+      this.historical = new FixtureHistory();
       this.state.elapsedMs = 0;
       this.state.spotlightSuppressed = false;
     } else if (command === "cue-spotlight") {
@@ -74,11 +81,11 @@ export class Director {
     }
     return this.snapshot();
   }
-  private engines(ply: number): EngineView[] {
+  private engines(ply: number, atMs: number): EngineView[] {
     return (Object.keys(providers) as EngineId[]).map((id) => {
       const source = providers[id];
       const position = this.positions[id].get(ply);
-      const samples = position?.revisions.filter(r => r.atMs <= this.state.elapsedMs) ?? [];
+      const samples = position?.revisions.filter(r => r.atMs <= atMs) ?? [];
       const latest = samples.at(-1);
       const view: EngineView = {
         id, source: source.provider, name: source.engine,
@@ -86,29 +93,55 @@ export class Director {
         scoreLabel: id === "sesse" ? "Pawns · White perspective" : "White / Draw / Black · %",
       };
       if (!position || !latest) return view;
-      const ready =
-        samples.length >= 3 &&
-        latest.atMs - samples[0].atMs >= 6000 &&
-        samples.every(
-          (r, i) =>
-            i === 0 ||
-            (r.version > samples[i - 1].version &&
-              r.work > samples[i - 1].work),
-        );
+      const { ready, delta } = workProgress(samples);
+      if (source.workUnit === "visits" && "candidateVisits" in latest && Array.isArray(latest.candidateVisits) && latest.work > 0) {
+        const counts: number[] = latest.candidateVisits;
+        const total = counts.reduce((a,b) => a+b, 0);
+        if (total <= latest.work && counts.length <= position.candidates.length &&
+            counts.every(n => Number.isSafeInteger(n) && n >= 0)) {
+          view.visitShares = counts.map((n,i) => ({ san: position.candidates[i].pv[0], percent: n * 100 / latest.work }));
+          view.visitShares.push({ san: "Other", percent: (latest.work-total) * 100 / latest.work });
+        }
+      }
       if ("score" in position) {
         const value = position.score.value;
         view.score = `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
       } else {
-        const { values, scale } = position.wdl;
-        const pct = (i: number) => values[i] * 100 / scale;
-        view.wdl = [pct(0), pct(1), pct(2)];
-        view.score = view.wdl.join(" / ");
+        view.wdl = outcomes(position.wdl, ply % 2 === 1);
+        if (position.wdl.scope === "candidate" && "candidateSan" in position.wdl &&
+            typeof position.wdl.candidateSan === "string") {
+          view.conditionalSan = position.wdl.candidateSan;
+          if (!position.candidates.some(c => c.pv[0] === view.conditionalSan)) view.wdl = undefined;
+        }
+        if (view.wdl) view.score = view.wdl.join(" / ");
       }
       return {
         ...view, status: ready ? "Ready" : "Provisional",
-        depth: latest.depth, work: latest.work,
+        depth: latest.depth, work: latest.work, workDelta: delta,
+        workUnit: source.workUnit === "nodes" || source.workUnit === "visits" ? source.workUnit : undefined,
         candidates: position.candidates.map(c => ({ depth: c.depth, moves: [...c.pv] })),
       };
+    });
+  }
+  private moveTimes(moves: string[]): MoveTime[] {
+    const previous: (number | undefined)[] = [];
+    const observations = new Map(demo.postMoveClocks.map(c => [c.ply, c]));
+    return moves.map((san, index) => {
+      const ply = index + 1;
+      const side = index % 2;
+      const event = demo.events[index - demo.moves.length];
+      const record: { suppliedMs?: number; bonusMs: number; adjustmentMs: number } | undefined =
+        event ?? observations.get(ply);
+      const postMs = event ? (side === 0 ? event.whiteMs : event.blackMs) : observations.get(ply)?.postMs;
+      const elapsedMs = duration(previous[side], {
+        postMs,
+        suppliedMs: record?.suppliedMs,
+        incrementMs: demo.incrementMs,
+        bonusMs: record?.bonusMs ?? 0,
+        adjustmentMs: record?.adjustmentMs ?? 0,
+      });
+      previous[side] = postMs;
+      return { ply, san, elapsedMs };
     });
   }
   snapshot(): ProgrammeSnapshot {
@@ -120,7 +153,16 @@ export class Director {
     const actualGame = replay(moves);
     const actual = boardFrame(actualGame);
     const key = rootKey(demo.id, epoch, 1, moves);
-    const engines = this.engines(moves.length);
+    const engines = this.engines(moves.length, elapsedMs);
+    const history = this.historical.rows(moves, elapsedMs, this.positions, epoch);
+    const moveTimes = this.moveTimes(moves);
+    const eligible = new Set<Panel>(["comparison"]);
+    if (engines.some(e => e.wdl)) eligible.add("outcomes");
+    if (engines.some(e => e.workUnit && e.work !== undefined)) eligible.add("search");
+    if (moveTimes.some(m => m.elapsedMs !== null)) eligible.add("time");
+    if (history.some(row => row.sesse || row.leela)) eligible.add("history");
+    const cycleStart = lastMove ? lastMove.atMs + 6000 : 0;
+    let panel = selectPanel(elapsedMs - cycleStart, eligible);
     let scene: Scene = {
       kind:
         lastMove && elapsedMs < lastMove.atMs + 6000
@@ -155,7 +197,8 @@ export class Director {
         ),
       };
     }
-    const signature = `${epoch}:1:${moves.length}:${scene.kind}`;
+    if (scene.kind !== "thinking") panel = "comparison";
+    const signature = `${epoch}:1:${moves.length}:${scene.kind}:${panel}`;
     if (signature !== this.state.lastSignature) {
       this.state.sceneNumber++;
       this.state.lastSignature = signature;
@@ -182,7 +225,7 @@ export class Director {
         moves,
       },
       actual,
-      engines,
+      engines, panel, moveTimes, history,
       scene,
       clocks: {
         whiteMs: Math.max(0, (lastMove ?? demo.clocks).whiteMs -

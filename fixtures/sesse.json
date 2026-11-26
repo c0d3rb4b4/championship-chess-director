@@ -1,5 +1,6 @@
 {
   "schema": "synthetic-demo-v1",
+  "workUnit": "nodes",
   "provider": "Sesse",
   "engine": "Stockfish",
   "gameId": "demo-italian-01",

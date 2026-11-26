@@ -1,5 +1,6 @@
 {
   "schema": "synthetic-demo-v1",
+  "workUnit": "visits",
   "provider": "Leela",
   "engine": "Leela Chess Zero",
   "gameId": "demo-italian-01",
@@ -27,8 +28,9 @@
       ],
       "revisions": [
         { "atMs": 0, "version": 1, "depth": 19, "work": 30000 },
+        { "atMs": 1500, "version": 1, "depth": 19, "work": 30000 },
         { "atMs": 3000, "version": 2, "depth": 20, "work": 60000 },
-        { "atMs": 6000, "version": 3, "depth": 21, "work": 95000 },
+        { "atMs": 6000, "version": 3, "depth": 21, "work": 95000, "candidateVisits": [38000, 19000, 11400] },
         { "atMs": 92000, "version": 4, "depth": 24, "work": 190000 }
       ],
       "wdl": {
@@ -51,7 +53,7 @@
         {"atMs": 99000, "version": 2, "depth": 19, "work": 40000},
         {"atMs": 102000, "version": 3, "depth": 20, "work": 60000}
       ],
-      "wdl": { "values": [260, 540, 200], "scale": 1000, "perspective": "white", "scope": "root", "calibration": "synthetic" },
+      "wdl": { "values": [200, 540, 260], "scale": 1000, "perspective": "side-to-move", "scope": "root", "calibration": "synthetic" },
       "candidates": [
         { "depth": 18, "pv": ["exd4", "cxd4", "Nxd4"] },
         { "depth": 17, "pv": ["Re8", "d5"] }
