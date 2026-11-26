@@ -1,0 +1,88 @@
+import { count, line, list, object, type Game } from "./game.js";
+
+// JSON-delta stanzas are [path, replacement] or [path] (deletion).
+function patch(document: unknown, delta: unknown[]) {
+  let copy = structuredClone(document);
+  for (const stanza of delta) {
+    const [path, replacement] = list(stanza);
+    if (!Array.isArray(path) || ![1, 2].includes(list(stanza).length)) throw Error("Invalid stanza");
+    const remove = list(stanza).length === 1;
+    if (!path.length) {
+      if (remove) throw Error("Missing replacement");
+      copy = replacement;
+      continue;
+    }
+    let parent = copy;
+    for (const [index, key] of path.entries()) {
+      const last = index === path.length - 1;
+      if (Array.isArray(parent)) {
+        if (count(key) === undefined || key >= parent.length + Number(last && !remove))
+          throw Error("Invalid array index");
+        if (!last) parent = parent[key];
+        else if (remove) parent.splice(key, 1);
+        else parent[key] = replacement;
+      } else {
+        const record = object(parent);
+        if (typeof key !== "string" || ["__proto__", "constructor", "prototype"].includes(key) ||
+            ((!last || remove) && !Object.hasOwn(record, key))) throw Error("Invalid member");
+        if (!last) parent = record[key];
+        else if (remove) delete record[key];
+        else record[key] = replacement;
+      }
+    }
+  }
+  return copy;
+}
+
+function score(value: unknown) {
+  if (!Array.isArray(value)) return;
+  const [kind, n, bound] = value;
+  if (kind === "d" && n === null) return { unit: "tablebase-draw" as const };
+  if (!Number.isSafeInteger(n) || ![undefined, "≥", "≤", ">=", "<="].includes(bound)) return;
+  if (kind === "cp") return { unit: "pawns" as const, value: n / 100, bound };
+  if (kind === "m") return { unit: "mate" as const, value: n, bound };
+}
+
+function decode(raw: unknown, game: Game) {
+  const data = object(raw), position = object(data.position);
+  if (!game.white || !game.black || game.white === "?" || game.black === "?" ||
+      position.player_w !== game.white || position.player_b !== game.black)
+    throw Error("Unbound Sesse players");
+  if (position.fen !== game.fen || JSON.stringify(position.history) !== JSON.stringify(game.moves))
+    throw Error("Wrong Sesse root");
+  const candidate = (entry: Record<string, unknown>) => ({
+    pv: line(game, list(entry.pv)), depth: count(entry.depth), score: score(entry.score)
+  });
+  const alternatives = Object.values(object(data.refutation_lines ?? {})).map(v => candidate(object(v)));
+  return { fen: game.fen, perspective: "white" as const, principal: candidate(data), alternatives, nodes: count(data.nodes) };
+}
+
+// One instance per operator-verified Sesse game mapping and authority root.
+export class SesseReplay {
+  private raw: unknown;
+  private version?: string;
+  lastWorkMs?: number;
+  private fingerprint?: string;
+  constructor(private readonly game: Game) {}
+  disconnect() {
+    this.raw = this.version = undefined;
+  }
+  receive(version: string, base: string | undefined, body: unknown, receivedMs: number) {
+    try {
+      if (Array.isArray(body) && this.version === undefined) throw Error("Full snapshot required");
+      if (version === this.version) return decode(this.raw, this.game);
+      if (Array.isArray(body) && base !== this.version) throw Error("Full snapshot required");
+      const raw = Array.isArray(body) ? patch(this.raw, body) : structuredClone(body);
+      const observation = decode(raw, this.game);
+      const fingerprint = JSON.stringify(observation);
+      if (this.fingerprint !== fingerprint) this.lastWorkMs = receivedMs;
+      this.fingerprint = fingerprint;
+      this.raw = raw;
+      this.version = version;
+      return observation;
+    } catch (error) {
+      this.disconnect();
+      throw error;
+    }
+  }
+}
