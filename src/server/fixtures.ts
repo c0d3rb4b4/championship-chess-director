@@ -82,7 +82,8 @@ export function validateFixtures(): void {
     wdl.perspective !== "white" ||
     wdl.scope !== "root" ||
     wdl.scale !== 1000 ||
-    wdl.values.some((v) => v < 0 || v > wdl.scale) ||
+    wdl.values.length !== 3 ||
+    wdl.values.some((v) => !Number.isInteger(v) || v < 0 || v > wdl.scale) ||
     wdl.values.reduce((a, b) => a + b, 0) !== wdl.scale
   ) {
     throw new Error("Unsupported synthetic WDL contract");

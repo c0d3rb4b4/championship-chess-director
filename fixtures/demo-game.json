@@ -2,10 +2,10 @@
   "schema": "synthetic-demo-v1",
   "id": "demo-italian-01",
   "event": "THE CLASSICAL ROOM",
-  "round": "Rehearsal · Game 1",
+  "round": "Game 1",
   "white": "Alex Morgan",
   "black": "Sam Rivera",
-  "opening": "Italian Game · illustrative position",
+  "opening": "Italian Game",
   "moves": [
     "e4",
     "e5",

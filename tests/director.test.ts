@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Director } from "../src/server/director.js";
-import { demo, rootKey, variationFrames } from "../src/server/fixtures.js";
+import { demo, providers, rootKey, variationFrames } from "../src/server/fixtures.js";
 
 test("deterministic think → frozen variation → actual move, including an equal-time PV deadline", () => {
   const replay = () => {
@@ -127,4 +127,21 @@ test("a legal position alone cannot bind different games or histories; invalid P
   );
   assert.throws(() => variationFrames(demo.moves, ["d4", "Qh1"]));
   assert.throws(() => new Director().advanceTo(-1));
+});
+
+test("fixture scorecards retain a negative pawn score and a genuine zero outcome", () => {
+  const originalScore = providers.sesse.score.value;
+  const originalWdl = providers.leela.wdl.values;
+  try {
+    providers.sesse.score.value = -0.35;
+    providers.leela.wdl.values = [0, 615, 385];
+    const [stockfish, leela] = new Director().advanceTo(6000).engines;
+    assert.equal(stockfish.score, "-0.35");
+    assert.deepEqual(leela.wdl, [0, 61.5, 38.5]);
+    providers.sesse.score.value = 0;
+    assert.equal(new Director().advanceTo(6000).engines[0].score, "0.00");
+  } finally {
+    providers.sesse.score.value = originalScore;
+    providers.leela.wdl.values = originalWdl;
+  }
 });

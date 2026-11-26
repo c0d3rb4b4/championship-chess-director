@@ -31,13 +31,37 @@ function players(s: ProgrammeSnapshot): string {
     <div class="player ${s.game.turn === "b" ? "running" : ""}"><span class="player-name"><i class="player-piece black-dot"></i>${e(s.game.black)}</span><strong data-clock="b">${clock(s.clocks.blackMs)}</strong></div>
   </div>`;
 }
-function engineSummary(engine: EngineView): string {
-  return `<div class="engine-summary ${engine.id}"><div><span class="eyebrow">${engine.id === "sesse" ? "STOCKFISH / SESSE" : "LEELA CHESS ZERO"}</span><strong>${e(engine.score)}</strong></div><p>${engine.status === "Updating for this position" ? e(engine.status) : e(engine.scoreLabel)}</p></div>`;
+function outcomeEstimate(values: [number, number, number]): string {
+  const labels = ["White win", "Draw", "Black win"];
+  return `<div class="wdl" aria-label="Leela outcome estimate for the current position">
+    <div class="wdl-values">${values.map((value, i) => `<div><span>${labels[i]}</span><strong>${value}%</strong></div>`).join("")}</div>
+    <div class="wdl-bar" aria-hidden="true">${values.map((value) => `<i style="width:${value}%"></i>`).join("")}</div>
+  </div>`;
 }
-function engineColumn(engine: EngineView): string {
-  return `<section class="engine-column ${engine.id}"><div class="engine-heading"><span>${engine.id === "sesse" ? "Stockfish" : "Leela"}</span><span class="source-state">${e(engine.status)}</span></div>
-    ${engine.candidates.length ? engine.candidates.map((c, i) => `<div class="candidate ${i === 0 ? "preferred" : ""}"><div><span class="candidate-label">${i === 0 ? "TOP CANDIDATE" : "ALTERNATIVE"}</span><span class="depth">Depth ${c.depth}</span></div><strong>${e(c.moves[0])}</strong><p>${e(c.moves.slice(1, 5).join("  "))}</p></div>`).join("") : '<div class="updating"><span class="quiet-mark">···</span><h3>Updating for this position</h3><p>Previous suggestions have been cleared. Waiting for matching analysis.</p></div>'}
-    </section>`;
+
+function engineSheet(engine: EngineView): string {
+  const stats = engine.wdl
+    ? outcomeEstimate(engine.wdl)
+    : engine.id === "sesse" && engine.candidates.length
+      ? `<div class="pawn-score"><span>White eval · pawns</span><strong>${e(engine.score)}</strong></div>`
+      : "";
+  const rows = engine.candidates.slice(0, 3).map((line, i) =>
+    `<tr><td>${i + 1}</td><th scope="row">${e(line.moves[0])}</th><td>${e(line.moves.slice(1, 5).join("  "))}</td><td>${line.depth}</td></tr>`
+  ).join("");
+  return `<section class="engine-sheet ${engine.id}">
+    <header><div><h2>${e(engine.name)}</h2><p>${engine.id === "sesse" ? e(engine.source) + " · " : ""}${e(engine.status)}</p></div>${stats}</header>
+    ${rows ? `<table aria-label="${e(engine.name)} candidates"><thead><tr><th>#</th><th>Move</th><th>Continuation</th><th>Depth</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+  </section>`;
+}
+
+function playedMoves(s: ProgrammeSnapshot): string {
+  const moves = s.game.moves;
+  const start = Math.max(0, (Math.ceil(moves.length / 2) - 5) * 2);
+  const pairs: string[] = [];
+  for (let i = start; i < moves.length; i += 2) {
+    pairs.push(`<li><span>${i / 2 + 1}.</span><b>${e(moves[i])}</b>${moves[i + 1] ? `<b>${e(moves[i + 1])}</b>` : ""}</li>`);
+  }
+  return `<footer class="played-moves"><h2>Played moves</h2><ol>${pairs.join("")}</ol></footer>`;
 }
 function recentMoves(s: ProgrammeSnapshot): string {
   const rows = [];
@@ -54,31 +78,37 @@ function recentMoves(s: ProgrammeSnapshot): string {
 }
 function programme(s: ProgrammeSnapshot): string {
   const spotlight = s.scene.kind === "spotlight";
+  const waiting = s.engines.every(engine => engine.status === "Updating for this position");
   const index = s.scene.frameIndex ?? 0;
-  return `<main class="programme ${spotlight ? "spotlight" : ""}" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
-    <header class="programme-header"><div><h1>${e(s.game.event)}</h1><p>${e(s.game.round)}<span class="separator">/</span>ACTUAL GAME · ${s.game.turn === "w" ? "WHITE" : "BLACK"} TO MOVE · after ${e(s.actual.moveLabel)}</p></div><div class="broadcast-label"><span class="demo-badge">DEMO</span>${players(s)}</div></header>
-    ${
-      spotlight
-        ? `<section class="mini-actual"><h2>ACTUAL GAME</h2><p class="actual-caption">Position after ${e(s.actual.moveLabel)}</p><div class="mini-board">${board(s.actual, "actual")}</div><div class="think-caption"><span class="thinking-indicator"></span>${s.game.turn === "w" ? "White" : "Black"} is still thinking.</div><p class="mini-note">The actual game stays here.<br>A played move interrupts this line.</p></section>
-      <section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2><div class="analysis-board" data-frame="${index}">${board(s.scene.frames![index], "analysis")}</div></section>
-      <aside class="variation-rail sesse"><span class="eyebrow">POSSIBLE CONTINUATION</span><h2>Stockfish idea</h2><p>From the actual position<br>after ${e(s.actual.moveLabel)}</p><ol>${s.scene
-        .frames!.slice(1)
-        .map(
-          (f, i) =>
-            `<li class="${i + 1 === index ? "current" : i + 1 < index ? "passed" : ""}"><span>${e(f.moveLabel)}</span></li>`,
-        )
-        .join(
-          "",
-        )}</ol><div class="rail-footer"><strong>Frozen legal line</strong><span>${index === 0 ? "Root position" : `Ply ${index} of ${s.scene.frames!.length - 1}`}</span><span>Sesse · synthetic fixture</span></div></aside>`
-        : `<section class="large-actual"><h2 class="board-slug">Actual game</h2><div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
-      <div class="summary-row">${s.engines.map(engineSummary).join("")}</div>
-      <section class="comparison-panel"><div class="panel-title"><h2>${s.scene.kind === "actual-move" ? "A move on the board" : "Engine comparison"}</h2><span>${s.scene.kind === "actual-move" ? "ACTUAL MOVE" : "ENGINE CHOICES"}</span></div>
-      ${s.scene.kind === "actual-move" ? `<div class="move-announcement"><span class="move-number">10.</span><strong>d4</strong><p>White opens the centre.</p><span>Analysis playback interrupted · actual board restored</span></div><div class="pending-strip">Sesse and Leela · Updating for this position</div>` : `<div class="engine-columns">${s.engines.map(engineColumn).join("")}</div><p class="panel-disclaimer">${s.game.ply > 18 ? "The actual board has advanced. Previous-position analysis is hidden." : "Illustrative engine choices · hypothetical moves, not player predictions"}</p>`}
-      </section>`
-    }
-    <footer class="ticker"><span>${spotlight ? "ACTUAL GAME CONTINUES" : s.scene.kind === "actual-move" ? "MOVE PLAYED" : "GAME NOTES"}</span><p>${e(s.ticker)}</p></footer>
-    <div class="connection-banner" ${connected ? "hidden" : ""}>DEMO · CONNECTION INTERRUPTED · last confirmed board · clocks paused</div>
-  </main>`;
+  let scene: string;
+  if (spotlight) {
+    const frames = s.scene.frames!;
+    const engine = s.engines.find(engine => engine.id === s.scene.source);
+    scene = `<section class="mini-actual"><h2 class="board-slug">Actual game</h2>
+        <div class="mini-board">${board(s.actual, "actual")}</div>
+        <p class="mini-position">${e(s.actual.moveLabel)}</p></section>
+      <section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2>
+        <div class="analysis-board" data-frame="${index}">${board(frames[index], "analysis")}</div></section>
+      <aside class="variation-rail"><header><h2>${e(engine?.name ?? s.scene.source ?? "Variation")}</h2>
+          <span>${index} / ${frames.length - 1} plies</span></header>
+        <ol>${frames.slice(1).map((frame, i) =>
+          `<li${i + 1 === index ? ' class="current" aria-current="step"' : ""}>${e(frame.moveLabel)}</li>`
+        ).join("")}</ol></aside>`;
+  } else {
+    const supporting = waiting
+      ? `<div class="pending-panel"><div class="last-move"><span>Last move</span><strong>${e(s.actual.moveLabel)}</strong></div>
+           <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
+      : s.engines.map(engineSheet).join("");
+    scene = `<section class="large-actual"><h2 class="board-slug">Actual game</h2>
+             <div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
+             <section class="comparison-panel" aria-label="Engine analysis">${supporting}</section>`;
+  }
+  return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
+    <header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
+       <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
+       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>
+    ${scene}${playedMoves(s)}
+    <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED · Clocks paused</div></main>`;
 }
 function resizeProgramme(): void {
   if (!operator)
@@ -91,7 +121,7 @@ function renderProgramme(s: ProgrammeSnapshot): void {
   const key = JSON.stringify([
     s.scene.instance,
     s.scene.frameIndex,
-    s.engines.map((x) => [x.status, x.depth]),
+    s.engines,
   ]);
   if (key !== renderKey) {
     const previousScene = app.querySelector<HTMLElement>(".programme")?.dataset.scene;
@@ -112,16 +142,50 @@ function renderProgramme(s: ProgrammeSnapshot): void {
   }
 }
 function operatorShell(): void {
-  app.innerHTML = `<header class="operator-header"><a class="operator-brand" href="/operator"><span class="brand-icon">♞</span>CHESS DIRECTOR<span class="brand-divider"></span><span class="room-label">Control room</span></a><div><span class="demo-badge">DEMO</span><a class="text-link" href="/programme" target="_blank" rel="noopener">Open programme</a></div></header>
-    <div class="operator-layout"><aside class="operator-sidebar"><span class="eyebrow">LOCAL REHEARSAL</span><h1>The Classical<br>Room</h1><p class="sidebar-caption">One game. One shared programme.</p><div class="sidebar-section"><span class="eyebrow">BOUND EVENT</span><h3>Alex Morgan <span>vs</span><br>Sam Rivera</h3><p>Game 1 · White at the bottom<br>Italian Game · fictional players</p><div class="metadata-row"><span>Move authority</span><b>DEMO fixture</b></div><div class="metadata-row"><span>Programme delay</span><b>0 seconds</b></div><div class="metadata-row"><span>Audio</span><b>Silent</b></div></div><div class="sidebar-section"><span class="eyebrow">FIXTURE SOURCES</span><div id="source-health"></div><p>Hand-authored data. No live provider connections.</p></div><div class="sidebar-bottom"><span class="local-mark"></span>Loopback access only<p>Synthetic demo · v0.1.0</p></div></aside>
-    <main class="operator-main"><div class="operator-title"><div><span class="eyebrow">PROGRAMME MONITOR</span><h2>Direct the next moment.</h2><p>Every viewer sees the same scene, including the OBS programme.</p></div><div class="connection-status" id="connection-status">Connecting…</div></div>
-      <div class="control-grid"><section class="preview-section"><div class="section-bar"><span><i class="preview-light"></i>ON-AIR PREVIEW · DEMO</span><span>1920 × 1080</span></div><div class="programme-preview"><iframe src="/programme" title="Shared DEMO programme preview" tabindex="-1"></iframe></div><div class="preview-caption"><span id="current-scene">Thinking</span><span>Shared server timeline · no added delay</span></div>
-      <section class="cue-section"><div><span class="eyebrow">REHEARSAL CUES</span><h3>A complete story in three moments</h3></div><div class="cue-timeline"><div data-phase="thinking"><span class="step-dot"></span><strong>A player thinks</strong><small>0:00 · actual board stays large</small></div><div data-phase="spotlight"><span class="step-dot"></span><strong>An idea takes focus</strong><small>1:15 · frozen Stockfish continuation</small></div><div data-phase="actual-move"><span class="step-dot"></span><strong>A real move takes priority</strong><small>1:23 · 10.d4 restores the actual board</small></div></div><div class="cue-buttons"><button data-command="restart" class="button secondary">Restart demo</button><button data-command="cue-spotlight" class="button secondary">Cue variation</button><button data-command="release-move" class="button primary">Play actual move</button><button data-command="return-live" class="button quiet">Return to actual board</button></div><p class="cue-note">Cues advance presentation time. Leave it running to play the same sequence automatically in 83 seconds.</p><p id="command-status" role="status" aria-live="polite"></p></section>
-      </section><aside class="inspector"><section><span class="eyebrow">DIRECTOR STATUS</span><h3 id="director-scene">Player thinking</h3><div class="metadata-row"><span>Fixture time</span><b id="fixture-time">0:00</b></div><div class="metadata-row"><span>Actual position</span><b id="actual-position">After 9…h6</b></div><div class="metadata-row"><span>Game epoch / revision</span><b id="game-revision">1 / 1</b></div><div class="metadata-row"><span>Applied commands</span><b id="journal-count">0</b></div><p class="inspector-note">Real moves outrank playback. Return to actual board cancels the current variation without advancing the game.</p></section>
-      <section><span class="eyebrow">POSITION INTEGRITY</span><h3 class="integrity">Legal history verified</h3><p>Initial position, full move history, epoch and revision identify the analysis root.</p><code id="root-key"></code><p id="provider-contract"></p></section>
-      <section class="obs-card"><span class="eyebrow">READY FOR OBS</span><h3>One clean Browser Source</h3><p>Add the programme URL at <b>1920 × 1080</b>, 30 fps. Keep refresh-on-activation and shutdown-when-hidden disabled.</p><button class="button secondary" id="copy-url">Copy programme URL</button><p class="obs-footnote">Mix music separately in OBS.</p></section></aside></div>
-      <section class="operator-bottom"><div><span class="eyebrow">ACTUAL MOVES</span><div class="move-history" id="move-history"></div></div><div><span class="eyebrow">SCOPE OF THIS SLICE</span><p>Deterministic fixture rehearsal. Live feed capture, production protocol verification, delayed broadcasts and the full panel rotation are future milestones.</p></div></section>
-    </main></div>`;
+  app.innerHTML = `<main class="control-room">
+    <header class="operator-header">
+      <div><span class="demo-badge">DEMO</span><h1>Control room</h1></div>
+      <div><span class="connection-status" id="connection-status">Connecting…</span>
+      <a class="text-link" href="/programme" target="_blank" rel="noopener">Open programme</a></div>
+    </header>
+    <div class="control-grid">
+      <section class="station">
+        <div class="section-bar"><h2>Programme preview</h2><span>1920 × 1080</span></div>
+        <div class="programme-preview"><iframe src="/programme" title="Programme preview" tabindex="-1"></iframe></div>
+        <div class="preview-caption"><strong id="director-scene">—</strong><span>Elapsed <b id="fixture-time">0:00</b></span></div>
+        <div class="cue-buttons" role="group" aria-label="Rehearsal controls">
+          <button data-command="restart">Restart demo</button>
+          <button data-command="cue-spotlight">Cue variation</button>
+          <button data-command="release-move" class="primary">Play actual move</button>
+          <button data-command="return-live">Return to actual board</button>
+        </div>
+        <p id="command-status" role="status" aria-live="polite"></p>
+      </section>
+      <aside class="inspector">
+        <section><h2>Game</h2>
+          <dl class="data-rows">
+            <dt>Event</dt><dd id="bound-event">—</dd>
+            <dt>Round</dt><dd id="bound-round">—</dd>
+            <dt>White</dt><dd id="white-player">—</dd>
+            <dt>Black</dt><dd id="black-player">—</dd>
+            <dt>Last move</dt><dd id="actual-position">—</dd>
+          </dl>
+        </section>
+        <section><h2>Recent moves</h2><div class="move-history" id="move-history"></div></section>
+        <section><h2>Fixture feeds</h2><dl class="data-rows" id="source-health"></dl></section>
+        <details class="diagnostics"><summary>Rehearsal details</summary>
+          <dl class="data-rows">
+            <dt>Time control</dt><dd id="time-control">—</dd>
+            <dt>Variation cue</dt><dd id="variation-time">—</dd>
+            <dt>Move cue</dt><dd id="move-time">—</dd>
+            <dt>Epoch / revision</dt><dd id="game-revision">—</dd>
+            <dt>Commands</dt><dd id="journal-count">—</dd>
+            <dt>Root hash</dt><dd><code id="root-key">—</code></dd>
+          </dl><p id="provider-contract"></p>
+        </details>
+        <button id="copy-url">Copy programme URL</button>
+      </aside>
+    </div></main>`;
   app
     .querySelectorAll<HTMLButtonElement>("[data-command]")
     .forEach((button) =>
@@ -148,44 +212,31 @@ function setCommandStatus(value: string): void {
 }
 function renderOperator(s: ProgrammeSnapshot): void {
   setText("#fixture-time", shortTime(s.presentationMs));
-  setText("#actual-position", `After ${s.actual.moveLabel}`);
-  setText("#game-revision", `${s.game.epoch} / ${s.game.revision}`);
-  setText(
-    "#director-scene",
-    s.scene.kind === "spotlight"
-      ? "Variation spotlight"
-      : s.scene.kind === "actual-move"
-        ? "Actual move · 10.d4"
-        : s.game.ply > 18
-          ? "Black is thinking"
-          : "White is thinking",
-  );
-  setText(
-    "#current-scene",
-    `${s.scene.kind === "spotlight" ? "ANALYSIS LINE NOT PLAYED" : "ACTUAL GAME"} · ${s.game.turn === "w" ? "White" : "Black"} to move`,
-  );
-  setText("#root-key", s.game.rootKey.slice(0, 24) + "…");
   const key = JSON.stringify([
     s.scene.instance,
-    s.engines.map((x) => x.status),
+    s.game.rootKey,
+    s.engines.map((engine) => engine.status),
   ]);
   if (key !== renderKey) {
     renderKey = key;
+    setText("#bound-event", s.game.event);
+    setText("#bound-round", s.game.round);
+    setText("#white-player", s.game.white);
+    setText("#black-player", s.game.black);
+    setText("#actual-position", s.actual.moveLabel);
+    setText("#game-revision", `${s.game.epoch} / ${s.game.revision}`);
+    setText("#root-key", s.game.rootKey);
+    const scene = {
+      spotlight: "Variation",
+      "actual-move": "Move played",
+      thinking: "Actual board",
+    }[s.scene.kind];
+    setText("#director-scene", `${scene} · ${s.game.turn === "w" ? "White" : "Black"} to move`);
     app.querySelector("#source-health")!.innerHTML = s.engines
-      .map(
-        (x) =>
-          `<div class="source-health ${x.id}"><div><strong>${x.source === "Sesse" ? "Stockfish / Sesse" : "Leela Chess Zero"}</strong><span>${e(x.status)}</span></div><small>synthetic-demo-v1 · local fixture</small></div>`,
-      )
-      .join("");
+      .map((engine) =>
+        `<dt>${e(engine.source)}</dt><dd>${e(engine.status)}</dd>`
+      ).join("");
     app.querySelector("#move-history")!.innerHTML = recentMoves(s);
-    app
-      .querySelectorAll<HTMLElement>("[data-phase]")
-      .forEach((el) =>
-        el.classList.toggle(
-          "active",
-          el.dataset.phase === (s.game.ply > 18 ? "actual-move" : s.scene.kind),
-        ),
-      );
   }
   app
     .querySelectorAll<HTMLButtonElement>("[data-command]")
@@ -202,6 +253,9 @@ async function operatorDetails(): Promise<void> {
     const response = await fetch("/api/operator", { cache: "no-store" });
     if (!response.ok) throw new Error("Operator diagnostics unavailable");
     const details = (await response.json()) as OperatorSnapshot;
+    setText("#time-control", details.timeControl);
+    setText("#variation-time", shortTime(details.spotlightAtMs));
+    setText("#move-time", shortTime(details.moveAtMs));
     setText("#journal-count", String(details.journalEntries));
     setText("#provider-contract", details.providerContract);
   } catch {
@@ -229,11 +283,11 @@ async function sendCommand(command: Command): Promise<void> {
     accept(result.programme);
     setCommandStatus(
       command === "restart"
-        ? "Demo restarted. White is thinking."
+        ? "Demo restarted."
         : command === "cue-spotlight"
-          ? "Variation cued. The actual board stays visible."
+          ? "Variation cued."
           : command === "release-move"
-            ? "10.d4 played. Old playback cancelled."
+            ? `${result.programme.actual.moveLabel} played.`
             : "Actual board restored.",
     );
     await operatorDetails();

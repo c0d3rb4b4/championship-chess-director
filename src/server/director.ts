@@ -75,6 +75,10 @@ export class Director {
     return this.snapshot();
   }
   private engines(moved: boolean): EngineView[] {
+    const pawnValue = providers.sesse.score.value;
+    const { values, scale } = providers.leela.wdl;
+    const percent = (index: number) => values[index] * 100 / scale;
+    const outcomes: [number, number, number] = [percent(0), percent(1), percent(2)];
     return (Object.keys(providers) as EngineId[]).map((id) => {
       const source = providers[id];
       const samples = source.revisions.filter(
@@ -102,8 +106,8 @@ export class Director {
         score: moved
           ? "—"
           : id === "sesse"
-            ? `+${providers.sesse.score.value.toFixed(2)}`
-            : "30 / 50 / 20",
+            ? `${pawnValue > 0 ? "+" : ""}${pawnValue.toFixed(2)}`
+            : outcomes.join(" / "),
         scoreLabel:
           id === "sesse"
             ? "Pawns · White perspective"
@@ -116,7 +120,7 @@ export class Director {
               depth: c.depth,
               moves: [...c.pv],
             })),
-        wdl: moved || id !== "leela" ? undefined : [30, 50, 20],
+        wdl: moved || id !== "leela" ? undefined : outcomes,
       };
     });
   }
@@ -126,6 +130,7 @@ export class Director {
     const moved = elapsedMs >= demo.realMove.atMs;
     const moves = moved ? [...demo.moves, demo.realMove.san] : [...demo.moves];
     const actualGame = replay(moves);
+    const actual = boardFrame(actualGame);
     const key = rootKey(demo.id, epoch, 1, moves);
     const engines = this.engines(moved);
     let scene: Scene = {
@@ -134,10 +139,10 @@ export class Director {
           ? "actual-move"
           : "thinking",
       instance: "",
-      title: moved ? "Black to move" : "White is thinking",
+      title: actualGame.turn() === "w" ? "White to move" : "Black to move",
     };
     if (scene.kind === "actual-move")
-      scene.title = "10.d4 · played on the actual board";
+      scene.title = actual.moveLabel;
     if (
       !moved &&
       !this.state.spotlightSuppressed &&
@@ -152,7 +157,7 @@ export class Director {
       scene = {
         kind: "spotlight",
         instance: "",
-        title: "A possible continuation",
+        title: providers.sesse.engine + " variation",
         source: "sesse",
         rootKey: key,
         frames,
@@ -188,7 +193,7 @@ export class Director {
         turn: actualGame.turn(),
         moves,
       },
-      actual: boardFrame(actualGame),
+      actual,
       engines,
       scene,
       clocks: {
@@ -199,9 +204,7 @@ export class Director {
           ? Math.max(0, demo.clocks.blackMs - (elapsedMs - demo.realMove.atMs))
           : demo.clocks.blackMs,
       },
-      ticker: moved
-        ? "DEMO · 10.d4 is an actual fixture move. The hypothetical line has been cancelled."
-        : "DEMO · Fictional players and synthetic Sesse / Leela analysis. No live provider connection.",
+      ticker: actual.moveLabel,
     };
   }
   operator(
