@@ -1,12 +1,12 @@
 # Championship Chess Director delivery plan
 
-Start the next feature with **analysis for a second position**. The pilot already shows the first root, plays an illustrative line and interrupts on the actual move. Reacquiring analysis for the new root, one engine at a time, turns that short sequence into a repeatable development fixture for almost every later feature.
+Start with **Phase 0, the metal board**, to review the new visual direction against a working demo. Then use Phase 1 to reacquire analysis after a real move. Phase 0 is independent of the engine work, so Phases 1–5 keep their existing numbers and dependencies.
 
 [Product requirements](Live_Chess_Broadcast_UI_PRD.docx) · [Technical design](DESIGN.md) · [Demo implementation](DEMO_SLICE.md) · [Review captures](evidence/README.md)
 
 ## What exists today
 
-| Area | Evidence on main at `178ee83` | Boundary to carry forward |
+| Area | Pilot baseline through `64377bb` | Boundary to carry forward |
 |---|---|---|
 | Game | `fixtures/demo-game.json` contains 18 initial plies and one scheduled actual move, 10.d4. The server legally replays the history from the starting position. | The fixture has one scripted event and one analysed root. It does not establish event selection, corrections or result handling. |
 | Analysis | `src/server/fixtures.ts` checks game identity and replays each candidate. Both sources have three synthetic work samples at 0, 3 and 6 seconds. Each candidate carries its own depth. | The initial Leela root declares scale 1000, White perspective and synthetic calibration. Production score fields, scope and configuration need independent verification. |
@@ -14,20 +14,31 @@ Start the next feature with **analysis for a second position**. The pilot alread
 | Recovery | `src/server/http.ts` serves ordered full snapshots to both routes. SQLite stores one checkpoint and applied command IDs in `src/server/store.ts`. | A fixture restart restores elapsed programme time. A future restart against an advancing live feed needs a journal and a release cursor. |
 | Graphics | The broadcast strip and reduced-motion cut shipped in PR #2. The actual board scales from 768 to 416 px during a spotlight. The hypothetical board is separate and labelled. | Two-viewer browser timing is a local sample. Keep OBS performance and viewer comprehension as open release gates. |
 
-**This review.** The demo puts SAN, recent actual moves, source-labelled candidates, per-line depths and Stockfish/Leela statistics on screen. The played strip follows the accepted mainline across scenes. Whenever the engine summary is on air and matching WDL is available, it shows explicitly labelled percentages. A separate timed WDL detail view is optional; history graphs and live feeds are future slices. Operating instructions and interpretation belong in the README, control room or specification. The default programme carries the game, analysis, statistics and essential state labels. Reserve editorial features for an explicit producer choice.
+**Merged scorecard (PR #3).** The demo puts SAN, recent actual moves, source-labelled candidates, per-line depths and Stockfish/Leela statistics on screen. The played strip follows the accepted mainline across scenes. Whenever the engine summary is on air and matching WDL is available, it shows explicitly labelled percentages. A separate timed WDL detail view is optional; history graphs and live feeds are future slices. Operating instructions and interpretation belong in the README, control room or specification. The default programme carries the game, analysis, statistics and essential state labels. Reserve editorial features for an explicit producer choice.
 
 ## Sequence and dependencies
 
 | Slice | Depends on | Output to review |
 |---|---|---|
+| 0. Metal board theme | Current fixture pilot | Review opening and sparse endgame positions on silver and graphite boards. Inspect actual and hypothetical last-move highlights independently. |
 | 1. Multiple analysed positions | Current fixture pilot | Play 10.d4, watch each source update independently, then play a Black reply. |
 | 2. Statistics and rotation | Slice 1 for move boundaries | Watch WDL, search work and history advance across real moves with the actual board and clocks anchored. |
 | 3. Validate provider contracts (M0) | Independent of slices 1–2 | Replay captured packets offline into typed observations and inspect field provenance. |
 | 4. Release live game state (M1) | Slices 1 and 3 | Follow one bound game, with delay, corrections and recovery. |
 | 5. Generalise direction and operations (M2) | Slices 2 and 4 | Direct a full classical game through normal play, pressure, source failure, result and interval. |
-| 6. Broadcast sign-off (M3) | Slices 1–5 | Reproducible full-game and eight-hour rehearsals, browser and OBS evidence. |
+| 6. Broadcast sign-off (M3) | Phases 0–5 | Reproducible full-game and eight-hour rehearsals, browser and OBS evidence. |
 
-Each slice below can be split at its numbered steps. Preserve one working programme at each merge. The core gates have distinct owners in code: adapters establish field meanings, the server decides what is eligible, and the browser renders the released snapshot.
+**Progress at this revision.** Phases 0–6 are planned. PRs #1–3 delivered the fixture pilot, broadcast composition and scorecard. When working a phase, add its PR number and the passing or outstanding exit checks beside its row. Use the merged PR and its evidence to mark a phase complete.
+
+Deliver one selected phase per pull request. Use the numbered steps within that branch as implementation and verification checkpoints. Preserve one working programme at each merge. The core gates have distinct owners in code: adapters establish field meanings, the server decides what is eligible, and the browser renders the released snapshot.
+
+### 0. Metal board theme
+
+**Target.** The two reference views show the same board in an opening and a sparse endgame. Light squares resemble brushed silver plates with faint vertical grain and tiny fasteners just inside the corners. Dark graphite squares carry a quieter diagonal abrasion pattern. Coordinates reverse tone at the edge. The last move leaves a desaturated blue-grey tint on both the origin and destination. White pieces have an opaque light body with a strong dark outline. Black silhouettes have light internal cuts that distinguish the pieces even against graphite.
+
+**Implementation.** Start with the shared SVG board in `src/client/board.ts` and its piece and coordinate styling in `src/client/styles.css`. Give actual and analysis boards the same material and piece set. Scope SVG definitions per board instance. Render the last-move tint from each board’s own frame. Keep grain stationary and fasteners subordinate to the pieces. At the 416 px size, reduce texture detail first. Use locally bundled, reproducible artwork with recorded provenance. The fixed clocks, scorecard and played-move strip already provide the surrounding broadcast layout.
+
+**Exit evidence (A36 alongside A01, A27 and A29–33).** Capture the large board in a crowded opening and a sparse endgame, then capture the 416 px actual board beside the 768 px analysis board. Review at 1920 × 1080 and 1280 × 720. Check all twelve piece silhouettes on both square colours, edge-coordinate contrast and a last move on each colour. Advance the hypothetical line and confirm that only its board changes highlights. Release an actual move during the line and rerun the existing interruption and reduced-motion tests. Retain the captures for PR review. Phase 6 adds the encoded OBS check for texture shimmer. The current pilot captures document the walnut baseline until this phase lands.
 
 ### 1. Complete a second analysis cycle
 
@@ -40,7 +51,7 @@ Each slice below can be split at its numbered steps. Preserve one working progra
 
 ### 2. Add one statistical question per panel
 
-Extend `ProgrammeSnapshot` with the minimum typed data each panel needs. Keep panel selection and deadlines in the director. Use the existing 1920 × 1080 fixed canvas, score strip and small-board/large-board distinction. Make each row a separate, reviewable pull request.
+Extend `ProgrammeSnapshot` with the minimum typed data each panel needs. Keep panel selection and deadlines in the director. Use the existing 1920 × 1080 fixed canvas, score strip and small-board/large-board distinction. Implement the rows as review checkpoints on the Phase 2 branch and present their captures together in its pull request.
 
 | Panel | Data and display | Fixture and pass condition |
 |---|---|---|
@@ -97,7 +108,7 @@ Use `tests/director.test.ts` for clock-driven boundary cases, `tests/http.test.t
 | Full-game soak | Eight-hour recorded match with healthy long thinks, data loss, restart and a between-games interval. Sample process memory, journal size, reconnect counts, scene time shares and clock drift. | Bounded storage and memory after compaction, clocks agree with trusted anchors, no repeated announcements and no required manual direction. |
 | Viewer comprehension | During a spotlight ask five viewers independently which board is actual, who is to move and whether the featured line was played. | Each identifies all three within five seconds. Verify the minimal labels before adding any explanatory text. |
 
-Keep a fixture-level disposition for each v1.2 acceptance check in the release review:
+Record the result and evidence for the game-only presentation and planned v1.3 board theme in the release review.
 
 | Check | Verify on the captured programme |
 |---|---|
@@ -105,9 +116,27 @@ Keep a fixture-level disposition for each v1.2 acceptance check in the release r
 | A33 · Played strip | Release 10.d4 once. Exactly one ply appears; a PV step, manual return and browser refresh add zero. |
 | A34 · Outcome semantics | Validate all three fixture percentages, a legitimate zero, absence of WDL and an old-root message. Labels and eligibility must survive updates. |
 | A35 · Degraded state | Hold one source behind, disconnect the programme and reconnect. Only the appropriate status appears on air; technical recovery detail stays in the control room. |
+| A36 · Metal board | Compare opening and endgame at full and compact sizes. Inspect origin and destination tints, edge coordinates, piece detail and stable grain in the encoded recording. |
 
-Sign off A26–35 alongside the earlier slice evidence. Until the live feed and host checks pass, retain the DEMO/REPLAY identifier on fixture or recorded output.
+Sign off A26–36 alongside the earlier slice evidence. Until the live feed and host checks pass, retain the DEMO/REPLAY identifier on fixture or recorded output.
 
 ### Later, by explicit choice
 
 Optional database-departure and earlier-choice records need a named/versioned corpus or immutable pre-move evidence respectively (A15–16). Their failure mode is an omitted claim. Trivia, promotional copy and a commentary ticker are outside the default game presentation. Entry scheduling, provenance and expiry belong to a future opt-in editorial profile. None is a dependency of the next stats or live-feed pull request.
+
+
+## Run one phase in Codex
+
+Use the same request for every phase. With **NEXT**, start at Phase 0 and advance in numbered order after each reviewed PR is merged. You can substitute a number (0–6) to select a particular phase. The dependency table also supports starting Phase 3 alongside fixture development. If an open PR already covers the selected phase, continue there. The “Later” section is outside this numbered run.
+
+```text
+Implement phase NEXT of docs/PHASED_PLAN.md in c0d3rb4b4/championship-chess-director and open one PR against main. NEXT means the lowest-numbered unfinished phase whose prerequisites are merged. Use the plan, current code and existing PRs to determine its status. If all phases are complete, report that.
+
+Start from current main. Read the selected phase, its dependencies and exit criteria, the relevant parts of docs/DESIGN.md and the PRD in docs/, and inspect the current code and tests. Check merged work and open PRs first. Reuse an open phase branch, or create a fresh branch for the outstanding work. If the phase is already complete, give me its PR link.
+
+Implement the selected phase end to end. Keep the programme focused on the actual game, labelled analysis and stats. Run the repo’s typecheck, build, Node and browser tests plus the phase-specific checks. For visible changes, inspect 1080p and 720p captures and include them in the PR. Record what passed and any evidence that still needs a live feed, OBS host or viewer session.
+
+Update the phase progress in the plan, commit and push the work, and open or update the PR. Leave it open for review. Return the PR link, what I should inspect and any outstanding acceptance checks.
+```
+
+For a phase with an external sign-off step, deliver the work that can be verified, specify the missing evidence in the PR and resume that same phase when the evidence is available.
