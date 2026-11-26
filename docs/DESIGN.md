@@ -1,6 +1,6 @@
 # Championship Chess Director
 
-Technical design for the [Live Chess Broadcast Interface PRD v1.0](Live_Chess_Broadcast_UI_PRD.docx). The first release produces a silent, automatically directed programme for one championship game. OBS captures the programme URL and the producer mixes music separately. The source document contains the visual mockups, provider references S1–S13 and the normative acceptance cases A01–A28.
+Technical design for the [Live Chess Broadcast Interface PRD v1.1](Live_Chess_Broadcast_UI_PRD.docx). The first release produces a silent, automatically directed programme for one championship game. OBS captures the programme URL and the producer mixes music separately. The source document contains the visual mockups, provider references S1–S13 and the normative acceptance cases A01–A28.
 
 ## Runtime and ownership
 
@@ -62,7 +62,31 @@ After a spotlight, require a 90 s cooldown and 45 s of large-board time. Before 
 
 Use a fixed 1920 × 1080 canvas, scaled uniformly. Header at (48,32), actual board at (80,184) sized 768 square, dual-engine summary at (912,128), changing panel at (912,272) sized 960 × 680 and ticker at (48,984). Keep orientation fixed unless explicitly changed. In a spotlight retain a 416-square actual board, player clocks and side to move on the left. Give the 768-square analysis board a move rail, source, root move and permanent **ANALYSIS LINE NOT PLAYED** label. Only the actual board has clocks.
 
-Use cool blue for Stockfish and warm amber for Leela alongside their names. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Animate changed elements for 250–400 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars.
+Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Reveal an incoming supporting panel over 240 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars.
+
+### Score strip, board identity and motion
+
+The supplied broadcast frames establish three priorities: a board that can be read across a room, clocks that can be found without searching, and a single graphic answering the current question. Use the right-side area for engine analysis. The product needs neither a camera feed nor event artwork. The fixed header pairs the event and side to move with an ivory player strip. An underline and vermilion digits identify the running clock. Keep this header at the same coordinates during spotlight playback. Give each board its own label and reserve clocks for the actual game.
+
+| Element | Treatment at 1080p |
+|---|---|
+| Canvas and tiles | Flat near-black field (#101010), square corners, aligned seams. |
+| Clocks and scores | Ivory (#F7F5EF) with dark ink. Tabular digits and fixed allocation for both clocks. |
+| Board | Ivory (#F0D9B5) and walnut (#AE805E), with contrasting source and destination highlights. |
+| Graphic labels | Compact rectangular slugs, condensed uppercase headings, sentence case for continuations. Name each engine. |
+| Outcome graphic, next phase | Three aligned numbers for White / Draw / Black with a segmented bar below and a scope caption. Populate only from verified WDL. |
+
+| Change | First visible frame | Motion |
+|---|---|---|
+| Enter spotlight | Mini actual board, both real clocks and persistent analysis warning | Incoming variation rail rises 8 px over 240 ms with ease-out. |
+| Actual move during playback | Replace the PV tree with the accepted board, new clock state and pending engine state | Cut the board. Reveal the supporting move graphic independently. |
+| Next PV ply or clock tick | Advance the current frame or digits | Retain label positions. No scene entrance. |
+| Reconnect, refresh, reduced motion | Render the eligible snapshot | Direct cut. Never queue a missed animation. |
+| Future ticker / WDL updates | Publish the new eligible text or value | Crossfade ordinary ticker copy within its strip; interpolate bar width only. Cancel on a root change. |
+
+The pilot client receives full SSE snapshots. Keep the director authoritative and attach entrance motion only to a change of scene kind, outside the clock update path. Replacing obsolete nodes cancels their animations. Scene motion must never retain an old board overlay. For future panel and ticker rotation, key the transitioning region by scene instance, position root and content identity; do not rebuild the whole canvas for each statistic.
+
+See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
 
 ## Derived panels
 

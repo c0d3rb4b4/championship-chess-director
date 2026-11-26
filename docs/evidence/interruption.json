@@ -1,5 +1,5 @@
 {
-  "clickToPaintMs": 131.07750000000033,
+  "clickToPaintMs": 153.27266599999984,
   "viewers": 2,
   "targetMs": 500,
   "note": "Operator click to both DOM updates plus two animation frames; not an OBS capture benchmark."

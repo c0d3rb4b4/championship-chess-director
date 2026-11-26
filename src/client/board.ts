@@ -24,11 +24,11 @@ export function board(frame: BoardFrame, id: "actual" | "analysis"): string {
       const square = `${String.fromCharCode(97 + col)}${8 - row}`;
       const dark = (row + col) % 2 === 1;
       const highlighted = square === frame.from || square === frame.to;
-      cells += `<rect x="${col * 100}" y="${row * 100}" width="100" height="100" fill="${highlighted ? (dark ? "#a99b56" : "#d4c879") : dark ? "#80968b" : "#dce3d7"}"/>`;
+      cells += `<rect x="${col * 100}" y="${row * 100}" width="100" height="100" fill="${highlighted ? (dark ? "#b5aa53" : "#e9dd83") : dark ? "#ae805e" : "#f0d9b5"}"/>`;
       if (col === 0)
-        cells += `<text x="6" y="${row * 100 + 18}" class="coord" fill="${dark ? "#e5ebdf" : "#52675c"}">${8 - row}</text>`;
+        cells += `<text x="6" y="${row * 100 + 18}" class="coord" fill="${dark ? "#211a15" : "#4c3524"}">${8 - row}</text>`;
       if (row === 7)
-        cells += `<text x="${col * 100 + 84}" y="794" class="coord" fill="${dark ? "#e5ebdf" : "#52675c"}">${String.fromCharCode(97 + col)}</text>`;
+        cells += `<text x="${col * 100 + 84}" y="794" class="coord" fill="${dark ? "#211a15" : "#4c3524"}">${String.fromCharCode(97 + col)}</text>`;
     }
   const pieces = frame.pieces
     .map((p) => {
