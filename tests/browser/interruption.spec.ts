@@ -4,6 +4,7 @@ import { Director } from "../../src/server/director.js";
 
 // Capture both broadcast sizes from the same released scene.
 async function captureScene(page: Page, scene: string): Promise<void> {
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({ path: `docs/evidence/programme-${scene}-1080.png` });
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByTestId("actual-board")).toBeInViewport({ ratio: 0.999 });
@@ -17,6 +18,7 @@ test("operator drives two shared programme viewers; a real move cancels playback
   context,
   request,
 }, testInfo) => {
+  test.setTimeout(60000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/operator");
@@ -185,6 +187,26 @@ test("operator drives two shared programme viewers; a real move cancels playback
     body: measurement,
     contentType: "application/json",
   });
+  // Follow the same HTTP/SSE rehearsal through independent source returns.
+  const newFen = await actual.getAttribute("data-fen");
+  await expect(output).toContainText("+0.18", { timeout: 10000 });
+  await expect(programme.locator(".leela")).toContainText("Updating for this position");
+  await expect(outcomes).toHaveCount(0);
+  await expect(leela).toHaveCount(0);
+  await expect(sesse.getByRole("rowheader", { name: "exd4" })).toBeVisible();
+  await captureScene(programme, "stockfish-return");
+  await expect(outcomes.locator(".wdl-values > div")).toHaveText([
+    /White win\s*26%/, /Draw\s*54%/, /Black win\s*20%/,
+  ], { timeout: 9000 });
+  await expect(leela.getByRole("rowheader", { name: "exd4" })).toBeVisible();
+  await expect(actual).toHaveAttribute("data-fen", newFen!);
+  await captureScene(programme, "both-return");
+  await expect(played).toContainText("exd4", { timeout: 16000 });
+  await expect(actual).not.toHaveAttribute("data-fen", newFen!);
+  await expect(output).toContainText("White to move");
+  await expect(sesse).toHaveCount(0);
+  await expect(outcomes).toHaveCount(0);
+
 });
 
 test("an interrupted connection retains the last board, freezes clocks and shows a persistent warning", async ({

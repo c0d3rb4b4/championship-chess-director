@@ -57,35 +57,50 @@ export function boardFrame(game: Chess): BoardFrame {
 export function variationFrames(root: string[], moves: string[]): BoardFrame[] {
   const game = replay(root);
   const frames = [boardFrame(game)];
-  for (const move of moves.slice(0, 8)) {
+  for (const move of moves) {
     game.move(move); // Fail closed: chess.js throws for every illegal move, including special moves.
-    frames.push(boardFrame(game));
+    if (frames.length <= 8) frames.push(boardFrame(game));
   }
   return frames;
 }
-export function validateFixtures(): void {
-  replay([...demo.moves, demo.realMove.san]);
+// Each fixture is replayed in the current demo epoch. Index by ply only after
+// verifying the complete position history against the authoritative timeline.
+export function validateFixtures() {
+  const moves = [...demo.moves];
+  const histories = new Map([[moves.length, rootKey(demo.id, 1, 1, moves)]]);
+  let previousTime = 0;
+  for (const event of demo.events) {
+    if (event.atMs <= previousTime) throw new Error("Unordered game events");
+    moves.push(event.san);
+    histories.set(moves.length, rootKey(demo.id, 1, 1, moves));
+    previousTime = event.atMs;
+  }
+  type Position = (typeof sesse.positions | typeof leela.positions)[number];
+  const positions = { sesse: new Map<number, Position>(), leela: new Map<number, Position>() };
   for (const id of Object.keys(providers) as EngineId[]) {
     const source = providers[id];
-    if (
-      source.gameId !== demo.id ||
-      rootKey(source.gameId, 1, 1, source.rootMoves) !==
-        rootKey(demo.id, 1, 1, demo.moves)
-    ) {
-      throw new Error(`Wrong game or history in ${id} fixture`);
+    for (const position of source.positions) {
+      const ply = position.rootMoves.length;
+      if (source.gameId !== demo.id || positions[id].has(ply) ||
+          histories.get(ply) !== rootKey(source.gameId, 1, 1, position.rootMoves))
+        throw new Error(`Wrong game or history in ${id} fixture`);
+      for (const candidate of position.candidates)
+        variationFrames(position.rootMoves, candidate.pv);
+      if (position.revisions.some((r, i, all) => i > 0 && r.atMs <= all[i - 1].atMs))
+        throw new Error("Unordered analysis revisions");
+      if ("score" in position) {
+        const score = position.score;
+        if (score.kind !== "pawns" || score.perspective !== "white" || !Number.isFinite(score.value))
+          throw new Error("Unsupported synthetic pawn score");
+      } else {
+        const wdl = position.wdl;
+        if (wdl.perspective !== "white" || wdl.scope !== "root" || wdl.scale !== 1000 ||
+            wdl.values.length !== 3 || wdl.values.some(v => !Number.isInteger(v) || v < 0) ||
+            wdl.values.reduce((a, b) => a + b, 0) !== wdl.scale)
+          throw new Error("Unsupported synthetic WDL contract");
+      }
+      positions[id].set(ply, position);
     }
-    for (const candidate of source.candidates)
-      variationFrames(source.rootMoves, candidate.pv);
   }
-  const wdl = leela.wdl;
-  if (
-    wdl.perspective !== "white" ||
-    wdl.scope !== "root" ||
-    wdl.scale !== 1000 ||
-    wdl.values.length !== 3 ||
-    wdl.values.some((v) => !Number.isInteger(v) || v < 0 || v > wdl.scale) ||
-    wdl.values.reduce((a, b) => a + b, 0) !== wdl.scale
-  ) {
-    throw new Error("Unsupported synthetic WDL contract");
-  }
+  return positions;
 }

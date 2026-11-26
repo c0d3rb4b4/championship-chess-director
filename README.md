@@ -22,7 +22,8 @@ Open both routes and click **Restart demo** in the operator view. The fixture fo
 
 1. White thinks in the Italian Game after `9...h6`. The actual board is 768 pixels square. Three fixture analysis revisions settle over six seconds.
 2. At **1:15**, a frozen Stockfish line takes focus. The 416-pixel actual board, clocks and turn remain visible. The separate 768-pixel board carries **ANALYSIS LINE NOT PLAYED** throughout. It holds the root for two seconds and advances one hypothetical ply every two seconds.
-3. At **1:23**, the authoritative **DEMO move `10.d4`** interrupts playback, including a coincident PV deadline. The large actual board returns, the old scene is discarded, and both engines show an updating state. The move is emphasised for six seconds; the game then remains on the new board with Black thinking.
+3. At **1:23**, the authoritative **DEMO move `10.d4`** interrupts playback, including a coincident PV deadline. The large actual board returns, the old scene is discarded, and both engines show an updating state. The move is emphasised for six seconds; Black’s clock runs from the move anchor.
+4. At **1:30**, Stockfish returns with +0.18. A late Leela update for the old position at **1:32** leaves its sheet pending. At **1:36**, Leela returns with 26% White win, 54% draw and 20% Black win. At **1:50**, Black plays **10...exd4**, both sheets clear and White’s clock starts.
 
 For a quick walkthrough, click **Cue variation**, watch a few hypothetical plies, then **Play actual move**. These cues advance the shared presentation clock; the automatic sequence uses the same state machine. **Return to actual board** cancels the variation without playing a move. Restart to repeat. The demo does not silently loop.
 

@@ -3,41 +3,59 @@
   "provider": "Leela",
   "engine": "Leela Chess Zero",
   "gameId": "demo-italian-01",
-  "rootMoves": [
-    "e4",
-    "e5",
-    "Nf3",
-    "Nc6",
-    "Bc4",
-    "Bc5",
-    "c3",
-    "Nf6",
-    "d3",
-    "d6",
-    "O-O",
-    "O-O",
-    "Re1",
-    "a6",
-    "Bb3",
-    "Ba7",
-    "Nbd2",
-    "h6"
-  ],
-  "revisions": [
-    { "atMs": 0, "version": 1, "depth": 19, "work": 30000 },
-    { "atMs": 3000, "version": 2, "depth": 20, "work": 60000 },
-    { "atMs": 6000, "version": 3, "depth": 21, "work": 95000 }
-  ],
-  "wdl": {
-    "values": [300, 500, 200],
-    "scale": 1000,
-    "perspective": "white",
-    "scope": "root",
-    "calibration": "synthetic"
-  },
-  "candidates": [
-    { "depth": 21, "pv": ["Nf1", "Be6", "Bc2"] },
-    { "depth": 18, "pv": ["d4", "exd4", "cxd4"] },
-    { "depth": 16, "pv": ["h3", "Be6", "Bc2"] }
+  "positions": [
+    {
+      "rootMoves": [
+        "e4",
+        "e5",
+        "Nf3",
+        "Nc6",
+        "Bc4",
+        "Bc5",
+        "c3",
+        "Nf6",
+        "d3",
+        "d6",
+        "O-O",
+        "O-O",
+        "Re1",
+        "a6",
+        "Bb3",
+        "Ba7",
+        "Nbd2",
+        "h6"
+      ],
+      "revisions": [
+        { "atMs": 0, "version": 1, "depth": 19, "work": 30000 },
+        { "atMs": 3000, "version": 2, "depth": 20, "work": 60000 },
+        { "atMs": 6000, "version": 3, "depth": 21, "work": 95000 },
+        { "atMs": 92000, "version": 4, "depth": 24, "work": 190000 }
+      ],
+      "wdl": {
+        "values": [300, 500, 200],
+        "scale": 1000,
+        "perspective": "white",
+        "scope": "root",
+        "calibration": "synthetic"
+      },
+      "candidates": [
+        { "depth": 21, "pv": ["Nf1", "Be6", "Bc2"] },
+        { "depth": 18, "pv": ["d4", "exd4", "cxd4"] },
+        { "depth": 16, "pv": ["h3", "Be6", "Bc2"] }
+      ]
+    },
+    {
+      "rootMoves": ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "c3", "Nf6", "d3", "d6", "O-O", "O-O", "Re1", "a6", "Bb3", "Ba7", "Nbd2", "h6", "d4"],
+      "revisions": [
+        {"atMs": 96000, "version": 1, "depth": 18, "work": 20000},
+        {"atMs": 99000, "version": 2, "depth": 19, "work": 40000},
+        {"atMs": 102000, "version": 3, "depth": 20, "work": 60000}
+      ],
+      "wdl": { "values": [260, 540, 200], "scale": 1000, "perspective": "white", "scope": "root", "calibration": "synthetic" },
+      "candidates": [
+        { "depth": 18, "pv": ["exd4", "cxd4", "Nxd4"] },
+        { "depth": 17, "pv": ["Re8", "d5"] }
+      ]
+    }
   ]
 }
