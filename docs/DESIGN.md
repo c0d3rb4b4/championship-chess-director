@@ -1,6 +1,6 @@
 # Championship Chess Director
 
-Technical design for the [Live Chess Broadcast Interface PRD v1.2](Live_Chess_Broadcast_UI_PRD.docx). The first release produces a silent, automatically directed programme for one championship game. OBS captures the programme URL and the producer mixes music separately. The source document contains the visual mockups, provider references S1–S13 and the acceptance cases A01–A35.
+Technical design for the [Live Chess Broadcast Interface PRD v1.3](Live_Chess_Broadcast_UI_PRD.docx). The first release produces a silent, automatically directed programme for one championship game. OBS captures the programme URL and the producer mixes music separately. The source document contains the visual mockups, provider references S1–S13 and the acceptance cases A01–A36.
 
 ## What belongs on each surface
 
@@ -84,7 +84,7 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 |---|---|
 | Canvas and tiles | Flat near-black field (#101010), square corners, aligned seams. |
 | Clocks and scores | Ivory (#F7F5EF) with dark ink. Tabular digits and fixed allocation for both clocks. |
-| Board | Ivory (#F0D9B5) and walnut (#AE805E), with contrasting source and destination highlights. |
+| Board | Planned brushed-silver and graphite squares, bold monochrome pieces and a cool blue-grey last-move tint. See the board specification below. |
 | Graphic labels | Compact rectangular slugs, condensed uppercase headings, sentence case for continuations. Name each engine. |
 | Outcome display | Show independent White win, Draw and Black win percentages from a verified root or named candidate. The comparison sheet also uses these values for the segmented bar. |
 
@@ -99,6 +99,22 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 The pilot client receives full SSE snapshots. Keep the director authoritative and attach entrance motion only to a change of scene kind, outside the clock update path. Replacing obsolete nodes cancels their animations. Scene motion must never retain an old board overlay. For future panel rotation, key the transitioning region by scene instance, position root and content identity; do not rebuild the whole canvas for each statistic.
 
 See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
+
+### Board theme for Phase 0
+
+The planned default uses the metal board in the two supplied references. The pilot captures in this repository show the earlier ivory-and-walnut board. Phase 0 applies the new treatment to the large actual board, the smaller actual board during a spotlight, the analysis board and the control-room preview. The fixed clock strip, engine sheets, played-move strip and broadcast labels retain their existing positions.
+
+| Layer | Full board | Small actual board |
+|---|---|---|
+| Light squares | Brushed silver with fine vertical grain and a soft variation in brightness across the plate. Use a thin seam and discreet circular fasteners just inside the corners. | Flatten the brightness variation and omit fasteners if they interfere with coordinates or appear as isolated specks. |
+| Dark squares | Mid-to-dark graphite with low-contrast diagonal brushing. Keep enough separation between graphite and a black pawn to read the pawn’s head and base. | Reduce the grain contrast. Square colours alone must preserve the checkerboard pattern. |
+| Pieces | Use one locally bundled, consistently scaled vector set. White pieces have solid white interiors and heavy dark contours. Black silhouettes have light internal cuts to distinguish the crown, mitre, mane and rook battlements. Centre the pieces with a clear margin on all sides. | Keep contours and defining details legible when a square becomes approximately 35 px wide in a 720p preview. |
+| Last move | Tint both the departure and arrival squares muted blue-grey. Preserve the difference in brightness between a highlighted light square and a highlighted dark square. | Draw the highlight below the pieces. Keep both endpoints visible when one square is empty. |
+| Coordinates | Set files along the bottom edge and ranks along the left. Use dark ink on silver and light ink on graphite. Recheck contrast over the tint. | Reserve an inset clear of seams and fasteners. Coordinates must stay clear of adjacent corners and pieces. |
+
+**Rendering.** Extend the existing SVG board in `src/client/board.ts`. Its 800-unit view box already places eight 100-unit cells on each axis. Reuse that geometry and each board’s existing `BoardFrame` for piece positions and the two highlight squares. Layer square bases, static textures, highlights, pieces and coordinates in that order. Use role-specific IDs for definitions when actual and analysis SVGs share a page. A local SVG pattern or a small repeatable local image is sufficient for grain. Keep its origin fixed between snapshots so an idle position remains visually still. Ship original or appropriately licensed local artwork and retain its attribution when required.
+
+**A36 review evidence.** Capture a populated position that includes all six piece types and a sparse position with visible source and destination squares. Include the 768 px actual board, the 416 px actual board and the 768 px analysis board across captures at 1920 × 1080 and 1280 × 720. During playback, the actual board retains its last played move while the analysis board highlights each hypothetical ply. On interruption both the actual pieces and their highlights must show the newly played move on the first eligible frame. Inspect a scaled capture for coordinate and piece legibility. At the OBS rehearsal, inspect a short 30 fps recording for grain shimmer or blocking on static squares; reduce texture contrast or simplify the small board if either appears. Browser screenshots provide the review evidence for Phase 0 and the encoded recording belongs to the broadcast sign-off phase.
 
 ## Derived panels
 
@@ -145,6 +161,7 @@ Use recorded provider payloads, an injectable presentation clock and determinist
 
 | Gate | Evidence |
 |---|---|
+| Phase 0 — board theme | A36. Compare the metal board across both scene roles, sizes and viewport resolutions. Verify the two boards have independent last-move highlights. Include the texture in Phase 6 encoded capture. |
 | M0 — validate feeds | Capture current Sesse full/delta and Leela socket traffic. Verify event binding, WDL and candidate semantics, timing conventions and provider usage terms. Unknown Leela semantics block dual-engine launch. |
 | M1 — reliable live view | A02–04, A07–09, A14, A17–25. Inject a late engine, repeated patch, wrong history, lost base, correction, disconnect, result, refresh and restart. Inspect every delayed output surface. |
 | M2 — dynamic programme | A01, A05–06, A10, A24–27. Interrupt at each spotlight phase, including a pinned layout. Exercise castling, promotion and en passant. Have five viewers independently identify the actual board, turn and hypothetical status within five seconds. |
