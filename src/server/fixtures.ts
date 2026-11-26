@@ -7,8 +7,8 @@ import type { BoardFrame, EngineId } from "../shared/types.js";
 
 export { demo };
 export const providers = { sesse, leela };
-export function replay(moves: string[]): Chess {
-  const game = new Chess();
+export function replay(moves: string[], initial = DEFAULT_POSITION): Chess {
+  const game = new Chess(initial);
   for (const san of moves) game.move(san);
   return game;
 }
