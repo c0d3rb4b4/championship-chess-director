@@ -34,6 +34,9 @@ test("operator drives two shared programme viewers; a real move cancels playback
   expect(await programme.getByRole("button").count()).toBe(0);
   const actual = programme.getByTestId("actual-board");
   const root = await actual.getAttribute("data-fen");
+  const actualTint = actual.locator("[data-last-move-square]");
+  await expect(actual.locator('[data-last-move-square="h7"]')).toHaveAttribute("data-material", "silver");
+  await expect(actual.locator('[data-last-move-square="h6"]')).toHaveAttribute("data-material", "graphite");
   expect((await actual.boundingBox())!.width).toBe(768);
   // The two engine sheets are independent: each line keeps its supplied depth.
   const sesse = programme.getByRole("table", { name: /Stockfish.*candidates/i });
@@ -64,6 +67,8 @@ test("operator drives two shared programme viewers; a real move cancels playback
   await expect(
     programme.getByRole("heading", { name: "ANALYSIS LINE NOT PLAYED" }),
   ).toBeVisible();
+  const hypothetical = programme.getByTestId("analysis-board");
+  await expect(hypothetical.locator('[data-last-move-square="h7"]')).toHaveCount(1);
   await expect(programme.locator(".analysis-board")).toHaveAttribute(
     "data-frame",
     "1",
@@ -71,6 +76,17 @@ test("operator drives two shared programme viewers; a real move cancels playback
   );
   await expect(actual).toHaveAttribute("data-fen", root!);
   expect((await actual.boundingBox())!.width).toBe(416);
+  await expect(actualTint).toHaveCount(2);
+  await expect(actual.locator('[data-last-move-square="h7"]')).toHaveCount(1);
+  await expect(actual.locator('[data-last-move-square="h6"]')).toHaveCount(1);
+  await expect(hypothetical.locator("[data-last-move-square]")).toHaveCount(2);
+  await expect(hypothetical.locator('[data-last-move-square="d3"]')).toHaveCount(1);
+  await expect(hypothetical.locator('[data-last-move-square="d4"]')).toHaveCount(1);
+  await expect(actual.locator(".plate-fasteners")).toHaveCSS("display", "none");
+  await expect(hypothetical.locator(".plate-fasteners")).toHaveCSS("display", "inline");
+  expect(await programme.locator(".chessboard defs [id]").evaluateAll((defs) =>
+    new Set(defs.map((def) => def.id)).size === defs.length,
+  )).toBe(true);
   expect(
     (await programme.getByTestId("analysis-board").boundingBox())!.width,
   ).toBe(768);
@@ -117,11 +133,15 @@ test("operator drives two shared programme viewers; a real move cancels playback
   expect(clickToPaintMs).toBeLessThan(500);
   await expect(programme.getByTestId("analysis-board")).toHaveCount(0);
   await expect(actual).not.toHaveAttribute("data-fen", root!);
+  await expect(actualTint).toHaveCount(2);
+  await expect(actual.locator('[data-last-move-square="d3"]')).toHaveCount(1);
+  await expect(actual.locator('[data-last-move-square="d4"]')).toHaveCount(1);
   expect((await actual.boundingBox())!.width).toBe(768);
   await expect(
     programme.getByText("Updating for this position", { exact: true }),
   ).toBeVisible();
-  await expect(played).toContainText("d4");
+  await expect(played.getByText("d4", { exact: true })).toHaveCount(1);
+  await expect(programme.locator(".event")).toContainText("Black to move");
   await expect(programme.locator(".last-move strong")).toHaveText("10.d4");
   await expect(outcomes).toHaveCount(0);
   await expect(output).not.toContainText("+0.35");
@@ -137,9 +157,7 @@ test("operator drives two shared programme viewers; a real move cancels playback
   );
   await expect(programme.getByTestId("analysis-board")).toHaveCount(0);
   await programme.setViewportSize({ width: 1280, height: 720 });
-  expect(
-    (await programme.getByTestId("actual-board").boundingBox())!.width,
-  ).toBeCloseTo(512, 2);
+  await expect.poll(async () => (await actual.boundingBox())?.width).toBeCloseTo(512, 2);
   expect(
     await programme.evaluate(() => ({
       x: document.documentElement.scrollWidth <= innerWidth,
@@ -204,9 +222,23 @@ test("reduced-motion spotlight cuts keep the real clock strip anchored", async (
   const strip = viewer.locator(".programme-header .players");
   await expect(strip).toBeVisible();
   const bounds = await strip.boundingBox();
+  const played = viewer.locator(".played-moves");
+  const initialMoves = await played.textContent();
+  const clock = strip.locator('[data-clock="w"]');
+  const initialClock = await clock.innerText();
+  await expect(clock).not.toHaveText(initialClock);
+  await expect(viewer.locator(".scene-enter")).toHaveCount(0);
+  expect(await strip.boundingBox()).toEqual(bounds);
   await page.getByRole("button", { name: "Cue variation" }).click();
   await expect(viewer.locator(".variation-rail")).toHaveCSS("animation-name", "none");
   expect(await strip.boundingBox()).toEqual(bounds);
+  await page.getByRole("button", { name: "Return to actual" }).click();
+  await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);
+  await expect(played).toHaveText(initialMoves!);
+  await page.getByRole("button", { name: "Restart demo" }).click();
+  await expect(page.getByRole("status")).toContainText("Demo restarted");
+  await page.getByRole("button", { name: "Cue variation" }).click();
+  await expect(viewer.locator(".variation-rail")).toBeVisible();
   await page.getByRole("button", { name: "Play actual move" }).click();
   await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move");
   await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);

@@ -144,10 +144,10 @@ p {
 .board-slug, .analysis-region h2 { display: inline-flex; height: 40px; align-items: center; }
 .actual-board-wrap, .analysis-board { width: 768px; height: 768px; margin-top: 16px; }
 .chessboard { display: block; width: 100%; height: 100%; }
-.piece { font-family: "Arial Unicode MS", "DejaVu Sans", "Segoe UI Symbol", serif; font-size: 86px; paint-order: stroke fill; stroke-linejoin: round; stroke-width: 2.2px; }
-.white-piece { fill: #fffdf3; stroke: #24221c; }
-.black-piece { fill: #161614; stroke: #f5f2e9; stroke-width: 1.3px; }
+.mini-board .plate-sheen, .mini-board .plate-grain { opacity: .35; }
+.mini-board .plate-fasteners { display: none; }
 .coord { font-size: 17px; font-weight: 700; }
+.mini-board .coord { font-size: 21px; }
 .comparison-panel { left: 912px; width: 960px; height: 824px; display: grid; grid-auto-rows: 1fr; gap: 24px; }
 .engine-sheet { display: flex; flex-direction: column; background: #1c1c1b; }
 .engine-sheet header {
