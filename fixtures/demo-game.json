@@ -1,0 +1,33 @@
+{
+  "schema": "synthetic-demo-v1",
+  "id": "demo-italian-01",
+  "event": "THE CLASSICAL ROOM",
+  "round": "Rehearsal · Game 1",
+  "white": "Alex Morgan",
+  "black": "Sam Rivera",
+  "opening": "Italian Game · illustrative position",
+  "moves": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "Bc4",
+    "Bc5",
+    "c3",
+    "Nf6",
+    "d3",
+    "d6",
+    "O-O",
+    "O-O",
+    "Re1",
+    "a6",
+    "Bb3",
+    "Ba7",
+    "Nbd2",
+    "h6"
+  ],
+  "clocks": { "whiteMs": 3180000, "blackMs": 4860000 },
+  "realMove": { "atMs": 83000, "san": "d4", "whiteAfterMs": 3127000 },
+  "timeControl": "90 min + 30 s / move · fixture clock anchors",
+  "spotlightAtMs": 75000
+}

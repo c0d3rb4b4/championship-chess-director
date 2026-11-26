@@ -1,0 +1,40 @@
+{
+  "schema": "synthetic-demo-v1",
+  "provider": "Sesse",
+  "engine": "Stockfish · fixture",
+  "gameId": "demo-italian-01",
+  "rootMoves": [
+    "e4",
+    "e5",
+    "Nf3",
+    "Nc6",
+    "Bc4",
+    "Bc5",
+    "c3",
+    "Nf6",
+    "d3",
+    "d6",
+    "O-O",
+    "O-O",
+    "Re1",
+    "a6",
+    "Bb3",
+    "Ba7",
+    "Nbd2",
+    "h6"
+  ],
+  "revisions": [
+    { "atMs": 0, "version": 1, "depth": 29, "work": 12000000 },
+    { "atMs": 3000, "version": 2, "depth": 30, "work": 18000000 },
+    { "atMs": 6000, "version": 3, "depth": 31, "work": 25000000 }
+  ],
+  "score": { "kind": "pawns", "perspective": "white", "value": 0.35 },
+  "candidates": [
+    {
+      "depth": 31,
+      "pv": ["d4", "exd4", "cxd4", "Nxd4", "Nxd4", "Bxd4", "Nf3", "Ba7"]
+    },
+    { "depth": 27, "pv": ["Nf1", "Be6", "Bc2"] },
+    { "depth": 25, "pv": ["h3", "Be6", "Bc2"] }
+  ]
+}
