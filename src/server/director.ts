@@ -29,8 +29,8 @@ export const SPOTLIGHT_DURATION_MS = 22000; // 2 s root + 8 × 2 s plies + 4 s e
 /** One server-owned, deterministic state machine. Clients never schedule PV callbacks. */
 export class Director {
   private state: DirectorState;
+  private readonly positions = validateFixtures();
   constructor(checkpoint?: DirectorState) {
-    validateFixtures();
     this.state = checkpoint
       ? structuredClone(checkpoint)
       : {
@@ -62,29 +62,30 @@ export class Director {
       this.state.spotlightSuppressed = false;
     } else if (command === "cue-spotlight") {
       if (
-        this.state.elapsedMs >= demo.realMove.atMs ||
+        this.state.elapsedMs >= demo.events[0].atMs ||
         this.state.spotlightSuppressed
       )
         throw new Error("Restart the demo to cue another spotlight");
       this.state.elapsedMs = Math.max(this.state.elapsedMs, demo.spotlightAtMs);
     } else if (command === "release-move") {
-      this.state.elapsedMs = Math.max(this.state.elapsedMs, demo.realMove.atMs);
+      this.state.elapsedMs = Math.max(this.state.elapsedMs, demo.events[0].atMs);
     } else if (command === "return-live") {
       this.state.spotlightSuppressed = true;
     }
     return this.snapshot();
   }
-  private engines(moved: boolean): EngineView[] {
-    const pawnValue = providers.sesse.score.value;
-    const { values, scale } = providers.leela.wdl;
-    const percent = (index: number) => values[index] * 100 / scale;
-    const outcomes: [number, number, number] = [percent(0), percent(1), percent(2)];
+  private engines(ply: number): EngineView[] {
     return (Object.keys(providers) as EngineId[]).map((id) => {
       const source = providers[id];
-      const samples = source.revisions.filter(
-        (r) => r.atMs <= this.state.elapsedMs,
-      );
-      const latest = samples.at(-1)!;
+      const position = this.positions[id].get(ply);
+      const samples = position?.revisions.filter(r => r.atMs <= this.state.elapsedMs) ?? [];
+      const latest = samples.at(-1);
+      const view: EngineView = {
+        id, source: source.provider, name: source.engine,
+        status: "Updating for this position", score: "—", candidates: [],
+        scoreLabel: id === "sesse" ? "Pawns · White perspective" : "White / Draw / Black · %",
+      };
+      if (!position || !latest) return view;
       const ready =
         samples.length >= 3 &&
         latest.atMs - samples[0].atMs >= 6000 &&
@@ -94,48 +95,35 @@ export class Director {
             (r.version > samples[i - 1].version &&
               r.work > samples[i - 1].work),
         );
+      if ("score" in position) {
+        const value = position.score.value;
+        view.score = `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+      } else {
+        const { values, scale } = position.wdl;
+        const pct = (i: number) => values[i] * 100 / scale;
+        view.wdl = [pct(0), pct(1), pct(2)];
+        view.score = view.wdl.join(" / ");
+      }
       return {
-        id,
-        source: source.provider,
-        name: source.engine,
-        status: moved
-          ? "Updating for this position"
-          : ready
-            ? "Ready"
-            : "Provisional",
-        score: moved
-          ? "—"
-          : id === "sesse"
-            ? `${pawnValue > 0 ? "+" : ""}${pawnValue.toFixed(2)}`
-            : outcomes.join(" / "),
-        scoreLabel:
-          id === "sesse"
-            ? "Pawns · White perspective"
-            : "White / Draw / Black · %",
-        depth: moved ? undefined : latest.depth,
-        work: moved ? undefined : latest.work,
-        candidates: moved
-          ? []
-          : source.candidates.map((c) => ({
-              depth: c.depth,
-              moves: [...c.pv],
-            })),
-        wdl: moved || id !== "leela" ? undefined : outcomes,
+        ...view, status: ready ? "Ready" : "Provisional",
+        depth: latest.depth, work: latest.work,
+        candidates: position.candidates.map(c => ({ depth: c.depth, moves: [...c.pv] })),
       };
     });
   }
   snapshot(): ProgrammeSnapshot {
     const { epoch, elapsedMs } = this.state;
     // Authoritative move is evaluated first, including a tie with a playback deadline.
-    const moved = elapsedMs >= demo.realMove.atMs;
-    const moves = moved ? [...demo.moves, demo.realMove.san] : [...demo.moves];
+    const released = demo.events.filter(event => event.atMs <= elapsedMs);
+    const lastMove = released.at(-1);
+    const moves = [...demo.moves, ...released.map(event => event.san)];
     const actualGame = replay(moves);
     const actual = boardFrame(actualGame);
     const key = rootKey(demo.id, epoch, 1, moves);
-    const engines = this.engines(moved);
+    const engines = this.engines(moves.length);
     let scene: Scene = {
       kind:
-        moved && elapsedMs < demo.realMove.atMs + 6000
+        lastMove && elapsedMs < lastMove.atMs + 6000
           ? "actual-move"
           : "thinking",
       instance: "",
@@ -144,7 +132,7 @@ export class Director {
     if (scene.kind === "actual-move")
       scene.title = actual.moveLabel;
     if (
-      !moved &&
+      !lastMove &&
       !this.state.spotlightSuppressed &&
       elapsedMs >= demo.spotlightAtMs &&
       elapsedMs < demo.spotlightAtMs + SPOTLIGHT_DURATION_MS &&
@@ -152,7 +140,7 @@ export class Director {
     ) {
       const frames = variationFrames(
         demo.moves,
-        providers.sesse.candidates[0].pv,
+        engines[0].candidates[0].moves,
       );
       scene = {
         kind: "spotlight",
@@ -197,12 +185,10 @@ export class Director {
       engines,
       scene,
       clocks: {
-        whiteMs: moved
-          ? demo.realMove.whiteAfterMs
-          : Math.max(0, demo.clocks.whiteMs - elapsedMs),
-        blackMs: moved
-          ? Math.max(0, demo.clocks.blackMs - (elapsedMs - demo.realMove.atMs))
-          : demo.clocks.blackMs,
+        whiteMs: Math.max(0, (lastMove ?? demo.clocks).whiteMs -
+          (actualGame.turn() === "w" ? elapsedMs - (lastMove?.atMs ?? 0) : 0)),
+        blackMs: Math.max(0, (lastMove ?? demo.clocks).blackMs -
+          (actualGame.turn() === "b" ? elapsedMs - (lastMove?.atMs ?? 0) : 0)),
       },
       ticker: actual.moveLabel,
     };
@@ -215,8 +201,8 @@ export class Director {
       programme,
       fixtureTimeMs: this.state.elapsedMs,
       spotlightAtMs: demo.spotlightAtMs,
-      moveAtMs: demo.realMove.atMs,
-      completed: this.state.elapsedMs >= demo.realMove.atMs,
+      moveAtMs: demo.events[0].atMs,
+      completed: this.state.elapsedMs >= demo.events.at(-1)!.atMs,
       rootVerified: true,
       historyDigest: programme.game.rootKey,
       journalEntries,

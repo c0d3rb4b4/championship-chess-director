@@ -26,3 +26,16 @@ Typecheck, build, 11 Node tests and 6 Playwright tests passed. The Node suite ra
 ## Production checks
 
 Live provider contracts and release timing remain for the live-feed phases. Phase 6 retains encoded OBS review for grain shimmer, dropped frames and production interruption timing, the full-game soak and the five-viewer comprehension check.
+
+## Phase 1 analysis cycle
+
+These captures follow the same programme viewer across the first move and both independent engine returns.
+
+| Actual position | Programme state | 1080p | 720p |
+| --- | --- | --- | --- |
+| Ply 18 · White after 9...h6 | Stockfish +0.35 and Leela 30 / 50 / 20% | [Frame](programme-thinking-1080.png) | [Frame](programme-thinking-720.png) |
+| Ply 19 · Black after 10.d4 | Both engines pending. The variation disappears and the move enters the played strip. | [Frame](programme-interrupted-1080.png) | [Frame](programme-interrupted-720.png) |
+| Ply 19 · Black after 10.d4 | Stockfish +0.18 with legal Black candidates. Leela remains pending through its late ply-18 revision. | [Frame](programme-stockfish-return-1080.png) | [Frame](programme-stockfish-return-720.png) |
+| Ply 19 · Black after 10.d4 | Leela returns with 26 / 54 / 20%. The actual position and running clock owner stay fixed. | [Frame](programme-both-return-1080.png) | [Frame](programme-both-return-720.png) |
+
+The two-viewer browser rehearsal continues through 10...exd4 and the change to White's clock. The fake-clock test compares two complete replays one millisecond before, at and after each boundary, including the late ply-18 packet. See the [fixture guide](../../fixtures/README.md) for the time, ply and turn at each step and the [interruption measurement](interruption.json) for local click-to-paint timing. Live provider semantics and timing, encoded OBS output, the eight-hour soak and viewer comprehension remain production checks.

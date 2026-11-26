@@ -6,13 +6,30 @@ Both fixtures include the full standard-start move history and a bound game ID. 
 
 Sesse uses a typed White-oriented pawn score. Leela explicitly declares a synthetic root WDL, White perspective, per-thousand scale: 300/500/200 is shown as 30%/50%/20%. It is an illustrative engine estimate, not calibrated odds for the players. No candidate search shares or combined engine score are invented.
 
-Timeline: 0 s White thinking; 0/3/6 s substantive engine revisions; 75 s frozen Stockfish spotlight; 77/79/81 s three hypothetical plies; 83 s authoritative DEMO move `10.d4` takes priority over the next playback deadline; 89 s move emphasis ends. The actual game remains at ply 18 throughout the hypothetical line. After the real move both engines are marked “Updating for this position”. The sequence ends on the new board and does not loop silently.
+## Rehearsal timeline
+
+Times use the shared presentation clock. Each row gives the actual position after the event.
+
+| Seconds | Ply | Turn | Last actual move | Programme |
+| --- | --- | --- | --- | --- |
+| 0 / 3 / 6 | 18 | White | 9...h6 | Both sources advance. WDL is 30 / 50 / 20%. |
+| 75 / 77 / 79 / 81 | 18 | White | 9...h6 | Spotlight holds its root, then plays three hypothetical plies. |
+| 83 | 19 | Black | 10.d4 | Real move preempts the next PV frame. Both sources clear immediately. |
+| 89 | 19 | Black | 10.d4 | Six-second emphasis ends. |
+| 90 | 19 | Black | 10.d4 | Stockfish returns at +0.18 pawns. Leela stays pending. |
+| 92 | 19 | Black | 10.d4 | Late Leela revision for ply 18 has no visible effect. |
+| 93 | 19 | Black | 10.d4 | Second Stockfish sample. |
+| 96 | 19 | Black | 10.d4 | Stockfish settles. First matching Leela sample gives 26 / 54 / 20%. |
+| 99 / 102 | 19 | Black | 10.d4 | Leela advances, then settles. |
+| 110 / 116 | 20 | White | 10...exd4 | Both sheets clear. Move emphasis ends six seconds later. |
+
+Black thinks for 27 seconds and receives a 30-second increment. At the reply the clock anchors are White 3,127,000 ms and Black 4,863,000 ms. White's clock runs from there.
 
 ## Change a fixture without breaking its meaning
 
 | Input | Example | Downstream check |
 |---|---|---|
-| `demo-game.json` | Eighteen plies through `9...h6`; `realMove.san` is `d4` | Replay the entire move sequence. Both providers must bind the same `gameId` and `rootMoves`. A PV can never append to the actual history. |
+| `demo-game.json` | Eighteen plies through `9...h6`; `events[0].san` is `d4` | Replay the entire move sequence. Each provider position must bind the game and its complete accepted history. A PV can never append to the actual history. |
 | `sesse.json` | White-oriented `pawns` value `0.35` | Render the sign and two decimal places. Candidate depths 31, 27 and 25 belong to three separate rows. |
 | `leela.json` | `scope=root`, `perspective=white`, `scale=1000` | Label each outcome. The three values cover the current fixture position; the first candidate’s search allocation would be a different statistic. |
 | Both `revisions` lists | Three samples at 0, 3 and 6 seconds | The increasing version and work counters establish readiness within this fixture. Repeated samples are insufficient. |
