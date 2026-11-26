@@ -20,7 +20,7 @@ Start with **Phase 0, the metal board and matching piece set**, to review the ne
 
 | Slice | Depends on | Output to review |
 |---|---|---|
-| 0. Metal board and twelve chess pieces | Current fixture pilot | In review. Local A01, A27 and A29–33 regression checks plus A36 visual review are recorded in the [review captures](evidence/README.md). Live interruption, encoded OBS texture and viewer checks remain for sign-off. |
+| 0. Metal board and twelve chess pieces | Current fixture pilot | [PR #6](https://github.com/c0d3rb4b4/championship-chess-director/pull/6), complete on merge. Local A01, A27 and A29–33 regression checks plus A36 visual review are recorded in the [review captures](evidence/README.md). Live interruption, encoded OBS texture and viewer checks remain for sign-off. |
 | 1. Multiple analysed positions | Current fixture pilot | Play 10.d4, watch each source update independently, then play a Black reply. |
 | 2. Statistics and rotation | Slice 1 for move boundaries | Watch WDL, search work and history advance across real moves with the actual board and clocks anchored. |
 | 3. Validate provider contracts (M0) | Independent of slices 1–2 | Replay captured packets offline into typed observations and inspect field provenance. |
@@ -28,7 +28,7 @@ Start with **Phase 0, the metal board and matching piece set**, to review the ne
 | 5. Generalise direction and operations (M2) | Slices 2 and 4 | Direct a full classical game through normal play, pressure, source failure, result and interval. |
 | 6. Broadcast sign-off (M3) | Phases 0–5 | Reproducible full-game and eight-hour rehearsals, browser and OBS evidence. |
 
-**Progress at this revision.** Phase 0 is in review. Phases 1–6 are planned. PRs #1–3 delivered the fixture pilot, broadcast composition and scorecard. When working a phase, add its PR number and the passing or outstanding exit checks beside its row. Use the merged PR and its evidence to mark a phase complete.
+**Progress at this revision.** Phase 0 is in [PR #6](https://github.com/c0d3rb4b4/championship-chess-director/pull/6) for review. Phases 1–6 are planned. PRs #1–3 delivered the fixture pilot, broadcast composition and scorecard. When working a phase, add its PR number and the passing or outstanding exit checks beside its row. Use the merged PR and its evidence to mark a phase complete.
 
 Deliver one selected phase per pull request. Use the numbered steps within that branch as implementation and verification checkpoints. Preserve one working programme at each merge. The core gates have distinct owners in code: adapters establish field meanings, the server decides what is eligible, and the browser renders the released snapshot.
 
@@ -38,7 +38,7 @@ Deliver one selected phase per pull request. Use the numbered steps within that 
 
 **Implementation.** Start with the shared SVG board in `src/client/board.ts` and its piece and coordinate styling in `src/client/styles.css`. Give actual and analysis boards the same material and piece set. Scope SVG definitions per board instance. Render the last-move tint from each board’s own frame. Keep grain stationary and fasteners subordinate to the pieces. At the 416 px size, reduce texture detail first. Use locally bundled, reproducible artwork with recorded provenance. The fixed clocks, scorecard and played-move strip already provide the surrounding broadcast layout.
 
-**Piece artwork.** Deliver a locally bundled two-colour set alongside the square treatment. The current implementation draws the six Unicode symbols with a system font. Replace that piece-rendering path with deterministic vector artwork keyed by side and piece type. White pieces have opaque white bodies and bold black contours. Black pieces have solid dark bodies with deliberate white cuts in the face, crown or collars. A pawn can stay solid. The pieces themselves are flat ink drawings; the brushed finish belongs to the squares.
+**Piece artwork.** Deliver a locally bundled two-colour set alongside the square treatment. The fixture pilot drew six Unicode symbols with a system font. Replace that piece-rendering path with deterministic vector artwork keyed by side and piece type. White pieces have opaque white bodies and bold black contours. Black pieces have solid dark bodies with deliberate white cuts in the face, crown or collars. A pawn can stay solid. The pieces themselves are flat ink drawings; the brushed finish belongs to the squares.
 
 | Piece | Shape to match in both colours |
 |---|---|
