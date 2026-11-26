@@ -1,7 +1,7 @@
 {
   "schema": "synthetic-demo-v1",
   "provider": "Sesse",
-  "engine": "Stockfish · fixture",
+  "engine": "Stockfish",
   "gameId": "demo-italian-01",
   "rootMoves": [
     "e4",

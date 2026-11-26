@@ -1,5 +1,16 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
+import { Director } from "../../src/server/director.js";
+
+// Capture both broadcast sizes from the same released scene.
+async function captureScene(page: Page, scene: string): Promise<void> {
+  await page.screenshot({ path: `docs/evidence/programme-${scene}-1080.png` });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.getByTestId("actual-board")).toBeInViewport({ ratio: 0.999 });
+  await expect(page.locator(".played-moves")).toBeInViewport({ ratio: 0.999 });
+  await page.screenshot({ path: `docs/evidence/programme-${scene}-720.png` });
+  await page.setViewportSize({ width: 1920, height: 1080 });
+}
 
 test("operator drives two shared programme viewers; a real move cancels playback and restores 768px actual board", async ({
   page,
@@ -24,9 +35,26 @@ test("operator drives two shared programme viewers; a real move cancels playback
   const actual = programme.getByTestId("actual-board");
   const root = await actual.getAttribute("data-fen");
   expect((await actual.boundingBox())!.width).toBe(768);
-  await programme.screenshot({
-    path: "docs/evidence/programme-thinking-1080.png",
-  });
+  // The two engine sheets are independent: each line keeps its supplied depth.
+  const sesse = programme.getByRole("table", { name: /Stockfish.*candidates/i });
+  const leela = programme.getByRole("table", { name: /Leela.*candidates/i });
+  for (const [table, depth] of [[sesse, "25"], [leela, "16"]] as const) {
+    const candidate = table.getByRole("row").filter({
+      has: programme.getByRole("rowheader", { name: "h3", exact: true }),
+    });
+    await expect(candidate.getByRole("cell", { name: depth, exact: true })).toBeVisible();
+  }
+  await expect(output).toContainText("+0.35");
+  const outcomes = programme.locator(".wdl");
+  await expect(outcomes.locator(".wdl-values > div")).toHaveText([
+    /White win\s*30%/, /Draw\s*50%/, /Black win\s*20%/,
+  ]);
+  const played = programme.locator(".played-moves");
+  await expect(played).toContainText("h6");
+  await expect(played).not.toContainText("d4");
+  // Public output reserves the lower strip for the scoresheet.
+  await expect(programme.locator(".ticker")).toHaveCount(0);
+  await captureScene(programme, "thinking");
   await page.setViewportSize({ width: 1440, height: 1050 });
   await page.screenshot({ path: "docs/evidence/operator.png", fullPage: true });
   await page
@@ -49,9 +77,9 @@ test("operator drives two shared programme viewers; a real move cancels playback
   expect(await programme.locator(".analysis-region [data-clock]").count()).toBe(
     0,
   );
-  await programme.screenshot({
-    path: "docs/evidence/programme-variation-1080.png",
-  });
+  await expect(programme.locator(".variation-rail")).toContainText("d4");
+  await expect(played).not.toContainText("d4");
+  await captureScene(programme, "variation");
   const second = await context.newPage();
   await second.goto("/programme");
   await expect(second.getByTestId("programme")).toHaveAttribute(
@@ -91,8 +119,13 @@ test("operator drives two shared programme viewers; a real move cancels playback
   await expect(actual).not.toHaveAttribute("data-fen", root!);
   expect((await actual.boundingBox())!.width).toBe(768);
   await expect(
-    programme.getByText("Sesse and Leela · Updating for this position"),
+    programme.getByText("Updating for this position", { exact: true }),
   ).toBeVisible();
+  await expect(played).toContainText("d4");
+  await expect(programme.locator(".last-move strong")).toHaveText("10.d4");
+  await expect(outcomes).toHaveCount(0);
+  await expect(output).not.toContainText("+0.35");
+  await expect(output).not.toContainText("Nf1");
   await programme.screenshot({
     path: "docs/evidence/programme-interrupted-1080.png",
   });
@@ -144,8 +177,10 @@ test("an interrupted connection retains the last board, freezes clocks and shows
   const fen = await page.getByTestId("actual-board").getAttribute("data-fen");
   await page.context().setOffline(true);
   await expect(
-    page.getByText(/CONNECTION INTERRUPTED · last confirmed board/),
+    page.locator(".connection-banner"),
   ).toBeVisible();
+  await expect(page.locator(".connection-banner")).toContainText(/connection interrupted/i);
+  await expect(page.locator(".connection-banner")).toContainText(/clocks paused/i);
   const frozen = await page.locator('[data-clock="b"]').textContent();
   await page.waitForTimeout(1200);
   expect(await page.locator('[data-clock="b"]').textContent()).toBe(frozen);
@@ -176,4 +211,37 @@ test("reduced-motion spotlight cuts keep the real clock strip anchored", async (
   await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move");
   await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);
   expect(await strip.boundingBox()).toEqual(bounds);
+});
+
+test("a WDL revision at unchanged depth updates only the eligible position", async ({ page }) => {
+  const initial = new Director().advanceTo(6000);
+  const revised = structuredClone(initial);
+  revised.sequence++;
+  const leela = revised.engines.find((engine) => engine.id === "leela")!;
+  leela.wdl = [0, 61, 39];
+  leela.score = "0 / 61 / 39";
+
+  // Two consecutive SSE observations share the same scene, root, readiness and depth.
+  // A cache keyed on scene and depth alone would keep the first WDL figure on air.
+  let current = initial;
+  let sendRevision!: () => void;
+  const ready = new Promise<void>((resolve) => { sendRevision = resolve; });
+  await page.route("**/api/programme", (route) => route.fulfill({ json: current }));
+  await page.route("**/api/programme/events", async (route) => {
+    await ready;
+    await route.fulfill({
+      contentType: "text/event-stream",
+      body: `event: snapshot\ndata: ${JSON.stringify(revised)}\n\n`,
+    });
+  });
+  await page.goto("/programme", { waitUntil: "domcontentloaded" });
+  const outcomes = page.locator(".wdl");
+  await expect(outcomes).toContainText("30%");
+  current = revised; // Any concurrent resnapshot must read the same released state.
+  sendRevision();
+  await expect(outcomes.locator(".wdl-values > div")).toHaveText([
+    /White win\s*0%/, /Draw\s*61%/, /Black win\s*39%/,
+  ]);
+  await expect(outcomes).not.toContainText("30%");
+  await expect(page.getByTestId("actual-board")).toHaveAttribute("data-fen", initial.actual.fen);
 });

@@ -1,6 +1,6 @@
 # Championship Chess Director
 
-A silent, OBS-ready chess programme with a separate local control room. This first runnable slice uses a deterministic, continuously labelled **DEMO** game with synthetic Sesse and Leela fixtures. It makes no provider connections.
+A silent, OBS-ready chess programme with a separate local control room. The current build replays one synthetic **DEMO** game. The programme shows the board, real-game clocks, played moves, engine lines and their statistics. The control room holds the rehearsal cues and diagnostics.
 
 ## Run locally
 
@@ -16,13 +16,13 @@ npm run dev
 
 The server binds to loopback only. Keep it running while using OBS. `npm run dev` builds both bundles and starts the persistent server; rerun it after code changes. For a built checkout, `npm start` starts without rebuilding. `PORT=3100 npm run dev` selects another port.
 
-## Rehearse the complete sequence
+## Watch the demo
 
-Open both routes and click **Restart demo** in the operator view. Presentation time starts at zero:
+Open both routes and click **Restart demo** in the operator view. The fixture follows this sequence.
 
 1. White thinks in the Italian Game after `9...h6`. The actual board is 768 pixels square. Three fixture analysis revisions settle over six seconds.
 2. At **1:15**, a frozen Stockfish line takes focus. The 416-pixel actual board, clocks and turn remain visible. The separate 768-pixel board carries **ANALYSIS LINE NOT PLAYED** throughout. It holds the root for two seconds and advances one hypothetical ply every two seconds.
-3. At **1:23**, the authoritative **DEMO move `10.d4`** interrupts playback, including a coincident PV deadline. The large actual board returns, the old scene is discarded, and both engines show **Updating for this position**. The move is emphasised for six seconds; the game then remains on the new board with Black thinking.
+3. At **1:23**, the authoritative **DEMO move `10.d4`** interrupts playback, including a coincident PV deadline. The large actual board returns, the old scene is discarded, and both engines show an updating state. The move is emphasised for six seconds; the game then remains on the new board with Black thinking.
 
 For a quick walkthrough, click **Cue variation**, watch a few hypothetical plies, then **Play actual move**. These cues advance the shared presentation clock; the automatic sequence uses the same state machine. **Return to actual board** cancels the variation without playing a move. Restart to repeat. The demo does not silently loop.
 
@@ -57,7 +57,19 @@ The Chromium tests drive the actual operator buttons and two programme viewers. 
 
 The persistent Node/TypeScript server owns chess rules, a deterministic director, a SQLite WAL checkpoint/command journal and a shared ordered SSE stream. The browser renders validated board frames; it schedules no variation timers. Fixture score meanings and full history bindings are explicit. See [slice architecture and limits](docs/DEMO_SLICE.md) and [fixture contract](fixtures/README.md).
 
-This implements the first demo sequence, not the complete P0 release. Production adapters and captures, results/corrections, programme delay, the full scene rotation, editorial/profile editing, remote authentication and eight-hour/OBS performance gates remain future work. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
+This implements the first demo sequence, not the complete P0 release. Production adapters and captures, results/corrections, programme delay, the full scene rotation, producer profiles, remote authentication and eight-hour/OBS performance gates remain future work. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
 
+- [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
 - [Technical design](docs/DESIGN.md)
 - [Product requirements](docs/Live_Chess_Broadcast_UI_PRD.docx)
+
+## Where to make a change
+
+| Change | Start here | Check |
+|---|---|---|
+| On-air labels, score layout or transitions | `src/client/app.ts`, `src/client/styles.css` | Compare the three scenes in the browser evidence. Confirm the opponent’s clock, actual move list and board identity at 720p. |
+| Board rendering or highlighting | `src/client/board.ts` | Verify both actual and hypothetical boards against their own FEN and from/to squares. |
+| Engine fixture or score meaning | `fixtures/`, `src/server/fixtures.ts`, `src/server/director.ts` | Replay every PV from its bound root. Check candidate depths and the order and units of the outcome tuple. |
+| Scene timing or interruption | `src/server/director.ts` and `tests/director.test.ts` | Drive the injected clock either side of the boundary; an authoritative move wins a tie with a PV step. |
+
+The product requirements define what the audience sees. The design records the data and timing contracts. The plan breaks remaining work into reviewable changes. The [demo guide](docs/DEMO_SLICE.md) describes what this checkout can demonstrate today.
