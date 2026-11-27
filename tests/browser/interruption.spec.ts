@@ -108,34 +108,23 @@ test("two programme viewers receive the played position immediately and highligh
     "data-fen",
     root!,
   );
+  const playedFen = new Director().command("release-move").actual.fen;
   const started = performance.now();
   // Actual operator click exercises the HTTP command, shared director, SSE, and browser render path.
   await page
     .getByRole("button", { name: "Play actual move", exact: true })
     .click();
-  await expect(output).toHaveAttribute("data-scene", "actual-move", {
-    timeout: 500,
-  });
-  await expect(second.getByTestId("programme")).toHaveAttribute(
-    "data-scene",
-    "actual-move",
-    { timeout: 500 },
-  );
-  const playedFen = new Director().command("release-move").actual.fen;
   await Promise.all(
-    [programme, second].map(viewer =>
-      expect(viewer.getByTestId("actual-board")).toHaveAttribute("data-fen", playedFen, { timeout: 500 }),
-    ),
-  );
-  await Promise.all(
-    [programme, second].map((viewer) =>
-      viewer.evaluate(
+    [programme, second].map(async (viewer) => {
+      await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move", { timeout: 500 });
+      await expect(viewer.getByTestId("actual-board")).toHaveAttribute("data-fen", playedFen, { timeout: 500 });
+      await viewer.evaluate(
         () =>
           new Promise<void>((resolve) =>
             requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
           ),
-      ),
-    ),
+      );
+    }),
   );
   const clickToPaintMs = performance.now() - started;
   expect(clickToPaintMs).toBeLessThan(500);
