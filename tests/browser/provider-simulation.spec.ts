@@ -9,7 +9,7 @@ import type { EngineView, ProgrammeSnapshot } from "../../src/shared/types.js";
 
 type Row = { receivedMs: number } & (
   | { source: "authority"; observation: Game }
-  | { source: "sesse"; observation: ReturnType<SesseReplay["receive"]> }
+  | { source: "sesse"; observation: NonNullable<ReturnType<SesseReplay["receive"]>> }
   | { source: "leela"; observation: NonNullable<ReturnType<ReturnType<LeelaReplay["subscribe"]>>> }
 );
 
@@ -40,7 +40,7 @@ function simulate() {
   const output = execFileSync(process.execPath, ["--import", "tsx", "scripts/replay-providers.mjs",
     "fixtures/provider-simulation.json"], { encoding: "utf8" });
   const rows: Row[] = output.trim().split("\n").map(line => JSON.parse(line));
-  // Neither traffic during the authority gap nor frames from old subscriptions may emit.
+  // Stale Sesse roots, old Leela subscriptions and traffic during the authority gap emit nothing.
   expect(rows.map(row => row.receivedMs)).toEqual([0, 1, 2, 4, 5, 6, 7, 9, 11, 14, 15, 18]);
   const states = new Map<number, ProgrammeSnapshot>();
   let state: ProgrammeSnapshot | undefined;

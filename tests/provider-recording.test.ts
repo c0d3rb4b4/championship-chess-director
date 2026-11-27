@@ -17,7 +17,9 @@ test("replay reconnects all three providers and ignores pre-recovery traffic", t
     { ...delta, version: "102", base: "101", body: [], receivedMs: 5 },
     { ...frame, body: { status: {} }, receivedMs: 6 },
     close, { ...frame, receivedMs: 8 }, { ...delta, receivedMs: 9 },
-    { ...authority, receivedMs: 10 }, { ...full, receivedMs: 11 },
+    { ...authority, receivedMs: 10 },
+    { ...delta, receivedMs: 10.5 }, // A versioned delta cannot cross the disconnect.
+    { ...full, receivedMs: 11 },
     { ...subscribe, connection: 2, receivedMs: 12 }, { ...frame, receivedMs: 13 },
     { ...frame, connection: 2, receivedMs: 14 }
   );
@@ -27,6 +29,7 @@ test("replay reconnects all three providers and ignores pre-recovery traffic", t
   };
   const first = run();
   assert.equal(first.status, 0, first.stderr);
+  assert.match(first.stderr, /Sesse packet at 10\.5: full snapshot required/);
   assert.equal(run().stdout, first.stdout);
   const observations = first.stdout.trim().split("\n").map(row => JSON.parse(row));
   assert.deepEqual(observations.map(row => row.receivedMs), [0, 1, 2, 4, 5, 6, 10, 11, 14]);

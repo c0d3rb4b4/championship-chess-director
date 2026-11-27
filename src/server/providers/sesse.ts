@@ -54,7 +54,7 @@ function decode(raw: unknown, game: Game) {
       position.player_b !== (game.binding.sessePlayers?.black ?? game.black))
     throw Error("Unbound Sesse players");
   if (position.fen !== game.fen || JSON.stringify(position.history) !== JSON.stringify(game.moves))
-    throw Error("Wrong Sesse root");
+    return;
   const candidate = (entry: Record<string, unknown>) => ({
     pv: line(game, list(entry.pv)), depth: searchCount(entry.depth), score: score(entry.score)
   });
@@ -62,28 +62,38 @@ function decode(raw: unknown, game: Game) {
   return { fen: game.fen, perspective: "white" as const, principal: candidate(data), alternatives, nodes: searchCount(data.nodes) };
 }
 
-// One instance per operator-verified Sesse game mapping and authority root.
+export class SesseFullSnapshotRequired extends Error {}
+
+// One instance per operator-verified game mapping. The transport version can
+// advance while the provider and the authority are on different roots.
 export class SesseReplay {
   private raw: unknown;
   private version?: string;
   lastWorkMs?: number;
   private fingerprint?: string;
-  constructor(private readonly game: Game) {}
+  constructor(private game: Game) {}
+  setGame(game: Game) {
+    this.game = game;
+    this.fingerprint = this.lastWorkMs = undefined;
+  }
   disconnect() {
     this.raw = this.version = undefined;
   }
   receive(version: string, base: string | undefined, body: unknown, receivedMs: number) {
     try {
-      if (Array.isArray(body) && this.version === undefined) throw Error("Full snapshot required");
-      if (version === this.version) return decode(this.raw, this.game);
-      if (Array.isArray(body) && base !== this.version) throw Error("Full snapshot required");
-      const raw = Array.isArray(body) ? patch(this.raw, body) : structuredClone(body);
+      const delta = Array.isArray(body);
+      const duplicate = version === this.version;
+      if (delta && !duplicate && (this.version === undefined || base !== this.version))
+        throw new SesseFullSnapshotRequired("Full snapshot required");
+      const raw = duplicate ? this.raw : delta ? patch(this.raw, body) : structuredClone(body);
       const observation = decode(raw, this.game);
-      const fingerprint = JSON.stringify(observation);
-      if (this.fingerprint !== fingerprint) this.lastWorkMs = receivedMs;
-      this.fingerprint = fingerprint;
       this.raw = raw;
       this.version = version;
+      if (observation) {
+        const fingerprint = JSON.stringify(observation);
+        if (this.fingerprint !== fingerprint) this.lastWorkMs = receivedMs;
+        this.fingerprint = fingerprint;
+      }
       return observation;
     } catch (error) {
       this.disconnect();
