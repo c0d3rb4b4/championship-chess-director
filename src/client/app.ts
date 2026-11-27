@@ -27,25 +27,42 @@ function clock(ms: number): string {
 function shortTime(ms: number): string {
   return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 }
-function players(s: ProgrammeSnapshot): string {
-  return `<div class="players">
-    <div class="player ${s.game.turn === "w" ? "running" : ""}"><span class="player-name"><i class="player-piece white-dot"></i>${e(s.game.white)}</span><strong data-clock="w">${clock(s.clocks.whiteMs)}</strong></div>
-    <div class="player ${s.game.turn === "b" ? "running" : ""}"><span class="player-name"><i class="player-piece black-dot"></i>${e(s.game.black)}</span><strong data-clock="b">${clock(s.clocks.blackMs)}</strong></div>
-  </div>`;
+function player(s: ProgrammeSnapshot, side: "w" | "b"): string {
+  const white = side === "w";
+  const name = white ? s.game.white : s.game.black;
+  const country = white ? s.game.whiteCountry : s.game.blackCountry;
+  const ms = white ? s.clocks.whiteMs : s.clocks.blackMs;
+  const flag = country && /^[A-Z]{2}$/.test(country)
+    ? `<img class="player-flag" src="/flags/${country.toLowerCase()}.svg" alt="${country}">`
+    : "";
+  return `<div class="player${s.game.turn === side ? " running" : ""}" data-side="${side}" role="group" aria-label="${white ? "White" : "Black"}">
+      <span class="player-identity"><i class="player-piece" aria-hidden="true"></i>${flag}<span class="player-name">${e(name)}</span></span>
+      <strong data-clock="${side}">${clock(ms)}</strong>
+    </div>`;
 }
-function outcomeEstimate(values: [number, number, number]): string {
+function outcomeEstimate(values: [number, number, number], candidate?: string): string {
   const labels = ["White win", "Draw", "Black win"];
-  return `<div class="wdl" aria-label="Leela outcome estimate for the current position">
+  return `<div class="wdl" aria-label="Leela outcome estimate${candidate ? ` after ${e(candidate)}` : " for the current position"}">
+    ${candidate ? `<div class="outcome-scope">After ${e(candidate)}</div>` : ""}
     <div class="wdl-values">${values.map((value, i) => `<div><span>${labels[i]}</span><strong>${value}%</strong></div>`).join("")}</div>
     <div class="wdl-bar" aria-hidden="true">${values.map((value) => `<i style="width:${value}%"></i>`).join("")}</div>
   </div>`;
 }
 
+function pawnEstimate(pawns: number, score: string): string {
+  // The centre is equal and each half covers five pawns.
+  const whiteShare = 50 + Math.max(-5, Math.min(5, pawns)) * 10;
+  return `<div class="pawn-score">
+      <div><span>White eval · pawns</span><strong>${e(score)}</strong></div>
+      <div class="pawn-bar" aria-hidden="true"><i style="width:${whiteShare}%"></i></div>
+    </div>`;
+}
+
 function engineSheet(engine: EngineView): string {
   const stats = engine.wdl
-    ? (engine.conditionalSan ? `<span>After ${e(engine.conditionalSan)}</span>` : "") + outcomeEstimate(engine.wdl)
-    : engine.id === "sesse" && engine.candidates.length
-      ? `<div class="pawn-score"><span>White eval · pawns</span><strong>${e(engine.score)}</strong></div>`
+    ? outcomeEstimate(engine.wdl, engine.conditionalSan)
+    : engine.pawns !== undefined && Number.isFinite(engine.pawns)
+      ? pawnEstimate(engine.pawns, engine.score)
       : "";
   const rows = engine.candidates.slice(0, 3).map((line, i) =>
     `<tr><td>${i + 1}</td><th scope="row">${e(line.moves[0])}</th><td>${e(line.moves.slice(1, 5).join("  "))}</td><td>${line.depth ?? "—"}</td></tr>`
@@ -105,14 +122,18 @@ function supportingScene(s: ProgrammeSnapshot, content: string): string {
 function programmeHeader(s: ProgrammeSnapshot): string {
   return `<header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
        <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
-       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>`;
+       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span></div></header>`;
 }
 function programme(s: ProgrammeSnapshot, support: string): string {
   const spotlight = s.scene.kind === "spotlight";
   return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
     ${programmeHeader(s)}
     <section class="actual-game ${spotlight ? "mini-actual" : "large-actual"}"><h2 class="board-slug">Actual game</h2>
-      <div class="actual-board-wrap${spotlight ? " mini-board" : ""}">${board(s.actual, "actual")}</div>
+      <div class="players">
+        ${player(s, "b")}
+        <div class="actual-board-wrap${spotlight ? " mini-board" : ""}">${board(s.actual, "actual")}</div>
+        ${player(s, "w")}
+      </div>
       <p class="mini-position" ${spotlight ? "" : "hidden"}>${e(s.actual.moveLabel)}</p></section>
     ${supportingScene(s, support)}${playedMoves(s)}
     <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED · Clocks paused</div></main>`;
@@ -136,7 +157,12 @@ function isNextPlayedMove(s: ProgrammeSnapshot): boolean {
 }
 
 function renderProgramme(s: ProgrammeSnapshot): void {
-  const key = JSON.stringify([s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
+  const game = s.game;
+  const playersChanged = renderedGame?.turn !== game.turn || renderedGame.white !== game.white ||
+    renderedGame.black !== game.black || renderedGame.whiteCountry !== game.whiteCountry ||
+    renderedGame.blackCountry !== game.blackCountry;
+  const key = JSON.stringify([game.rootKey, game.turn, game.white, game.black, game.whiteCountry, game.blackCountry,
+    s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
     s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
   if (key !== renderKey) {
     const transition = renderedInstance && renderedInstance !== s.scene.instance;
@@ -147,6 +173,11 @@ function renderProgramme(s: ProgrammeSnapshot): void {
     const support = spotlight ? "" : supportingPanel(s);
     const interrupted = motion && isNextPlayedMove(s);
     if (main && (renderedGame?.rootKey === s.game.rootKey || interrupted)) {
+      if (playersChanged) {
+        for (const side of ["b", "w"] as const) {
+          main.querySelector(`.player[data-side="${side}"]`)!.outerHTML = player(s, side);
+        }
+      }
       if (interrupted) {
         // Publish the played position immediately, then reveal its tint on landing.
         main.querySelector(".actual-board-wrap")!.innerHTML = board(s.actual, "actual");

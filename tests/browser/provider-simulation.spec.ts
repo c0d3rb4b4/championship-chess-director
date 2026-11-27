@@ -53,7 +53,9 @@ function simulate() {
       if (row.source === "sesse") {
         const { principal, alternatives, nodes } = row.observation;
         state.engines[0] = { ...state.engines[0], status: "Provisional",
-          score: String(principal.score?.value ?? ""), work: nodes, workUnit: "nodes",
+          score: String(principal.score?.value ?? ""),
+          pawns: principal.score?.unit === "pawns" ? principal.score.value : undefined,
+          work: nodes, workUnit: "nodes",
           candidates: [principal, ...alternatives].map(c => ({ depth: c.depth, moves: c.pv })) };
       } else {
         state.engines[1] = { ...state.engines[1], status: "Provisional",
@@ -101,7 +103,9 @@ test("capture in-play provider replay at both broadcast sizes", { tag: "@review-
       else await expect(candidates).toHaveCount(0);
     }
     if (time === 6) await expect(page.locator(".sesse tbody td").last()).toHaveText("32");
+    await expect(page.locator(".pawn-bar")).toHaveCount(stockfish ? 1 : 0);
     await expect(page.locator(".wdl")).toHaveCount(0);
+    await expect(page.locator(".player-flag")).toHaveCount(0);
     for (const height of [1080, 720]) {
       await page.setViewportSize({ width: height * 16 / 9, height });
       await expect(board).toBeInViewport({ ratio: .999 });

@@ -95,8 +95,8 @@ p {
 }
 .programme-header {
   position: absolute;
-  inset: 28px 48px auto;
-  height: 76px;
+  inset: 14px 48px auto;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -122,29 +122,33 @@ p {
   text-transform: uppercase;
   padding: 5px 14px;
 }
-.programme-header .players {
-  width: 760px;
-  height: 66px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-items: stretch;
+.player {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  gap: 16px;
+  padding: 0 16px;
   background: var(--paper);
   color: var(--ink);
 }
-.player { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 8px; padding: 0 14px; }
-.player + .player { border-left: 2px solid #aaa79e; }
-.player-name { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 650; min-width: 0; line-height: 1.05; }
-.player-piece { width: 12px; height: 12px; flex-shrink: 0; border: 1px solid #252525; }
-.player-piece.white-dot { background: white; }
-.player-piece.black-dot { background: #181818; }
-.player strong { font-family: var(--display); font-size: 42px; letter-spacing: -.04em; flex-shrink: 0; }
-.player.running strong { color: var(--red); text-decoration: underline; text-underline-offset: 4px; }
-.actual-game, .analysis-region, .variation-rail, .comparison-panel { position: absolute; top: 128px; }
-.actual-game { z-index: 2; padding: 0 32px; }
-.large-actual { left: 48px; width: 832px; height: 824px; }
+.player-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.player-name { font-size: 34px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-piece { width: 18px; height: 18px; flex-shrink: 0; border: 1px solid #252525; }
+.player[data-side="w"] .player-piece { background: white; }
+.player[data-side="b"] .player-piece { background: #181818; }
+.player-flag { width: 40px; height: 30px; flex-shrink: 0; object-fit: cover; outline: 1px solid #0003; }
+.player strong { font: 750 44px / 1 var(--display); letter-spacing: -.035em; flex-shrink: 0; }
+.player.running strong { color: var(--red); text-decoration: underline; text-underline-offset: 3px; }
+
+.actual-game { position: absolute; top: 94px; left: 80px; width: 768px; z-index: 2; transform-origin: left top; }
+.analysis-region, .variation-rail, .comparison-panel { position: absolute; top: 128px; }
 .board-slug, .analysis-region h2 { display: inline-flex; height: 40px; align-items: center; }
-.actual-board-wrap, .analysis-board { width: 768px; height: 768px; margin-top: 16px; }
-.actual-board-wrap, .comparison-panel { transform-origin: left top; }
+.board-slug { height: 28px; padding-block: 0; margin-bottom: 6px; font-size: 22px; }
+.players { display: grid; gap: 8px; }
+.actual-board-wrap, .analysis-board { width: 768px; height: 768px; }
+.analysis-board { margin-top: 16px; }
+.comparison-panel { transform-origin: left top; }
 .actual-board-wrap[data-move-highlight-pending] [data-last-move-square] { opacity: 0; }
 .chessboard { display: block; width: 100%; height: 100%; }
 .mini-board .plate-sheen, .mini-board .plate-grain { opacity: .35; }
@@ -166,13 +170,18 @@ p {
 .engine-sheet h2, .variation-rail h2 { font-size: 36px; line-height: 1.1; }
 .engine-sheet header p, .pawn-score span, .wdl-values span { font-size: 22px; color: #49463f; }
 .engine-sheet header p { margin-top: 4px; }
-.pawn-score { display: grid; justify-items: end; }
-.pawn-score strong { font-family: var(--display); font-size: 52px; line-height: 1; }
+.pawn-score { width: 402px; }
+.pawn-score > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pawn-score strong { font-family: var(--display); font-size: 46px; line-height: 1; }
+.pawn-bar, .wdl-bar { display: flex; position: relative; margin-top: 6px; height: 16px; border: 1px solid #393832; }
+.pawn-bar { background: #191918; }
+.pawn-bar i { background: white; }
+.pawn-bar::after { content: ""; position: absolute; left: 50%; inset-block: 0; border-left: 2px solid #8b866e; }
+.outcome-scope { margin-bottom: 2px; font-size: 20px; font-weight: 650; text-align: center; }
 .wdl { width: 402px; }
 .wdl-values { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; }
 .wdl-values span, .wdl-values strong { display: block; }
 .wdl-values strong { font-family: var(--display); font-size: 40px; line-height: 1.1; }
-.wdl-bar { display: flex; margin-top: 6px; height: 10px; border: 1px solid #393832; }
 .wdl-bar i:nth-child(1) { background: white; }
 .wdl-bar i:nth-child(2) { background: #aaa8a0; }
 .wdl-bar i:nth-child(3) { background: #191918; }
@@ -193,9 +202,8 @@ p {
 .analysis-status { padding: 26px 34px; }
 .analysis-status span { color: var(--quiet); }
 .analysis-status h2 { margin-top: 8px; font-size: 32px; }
-.mini-actual { top: 296px; left: 24px; width: 480px; }
-.mini-board { width: 416px; height: 416px; }
-.mini-position { margin-top: 12px; font-size: 32px; font-weight: 700; }
+.mini-actual { top: 265px; left: 56px; transform: scale(calc(416 / 768)); }
+.mini-position { margin-top: 12px; font-size: 42px; font-weight: 700; }
 .spotlight-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .analysis-region { left: 600px; width: 768px; }
 .analysis-region h2 { font: 800 26px var(--display); color: var(--ink); background: var(--paper); padding: 0 16px; }
@@ -205,12 +213,12 @@ p {
 .variation-rail ol { display: grid; grid-template-columns: 1fr 1fr; margin: 0; padding: 12px 20px 20px; list-style: none; }
 .variation-rail li { padding: 19px 14px; font-size: 34px; font-weight: 650; border-bottom: 1px solid var(--rule); }
 .variation-rail li.current { color: var(--ink); background: var(--paper); box-shadow: inset 6px 0 var(--red); }
-.played-moves { position: absolute; inset: auto 48px 40px; height: 64px; border-top: 2px solid var(--rule); display: flex; align-items: center; gap: 26px; }
+.played-moves { position: absolute; inset: auto 48px 14px; height: 46px; border-top: 2px solid var(--rule); display: flex; align-items: center; gap: 26px; }
 .played-moves h2 { flex-shrink: 0; font: 750 24px var(--display); text-transform: uppercase; }
 .played-moves ol { display: flex; margin: 0; padding: 0; list-style: none; }
 .played-moves li { display: flex; align-items: baseline; gap: 14px; padding: 0 24px; border-left: 1px solid var(--rule); font-size: 30px; }
 .played-moves li span { color: var(--quiet); font-size: 22px; }
-.connection-banner { position: absolute; inset: auto 48px 40px; height: 64px; display: grid; place-content: center; background: var(--red); color: white; font-size: 26px; font-weight: 700; }
+.connection-banner { position: absolute; inset: auto 48px 14px; height: 46px; display: grid; place-content: center; background: var(--red); color: white; font-size: 26px; font-weight: 700; }
 .programme-header, .played-moves, .connection-banner { z-index: 3; }
 /* The operator is a separate, responsive control surface. */
 .operator-page {

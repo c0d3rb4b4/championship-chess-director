@@ -107,7 +107,7 @@ export function switchSpotlight(
   const leaving = programme.querySelector<HTMLElement>(
     spotlight ? ".comparison-panel:not([data-departing])" : ".spotlight-layer",
   )!;
-  const from = motion === "cut" ? undefined : board.getBoundingClientRect();
+  const from = motion === "cut" ? undefined : actual.getBoundingClientRect();
   const leavingStart = pose(leaving);
   cutProgrammeMotion(leaving);
 
@@ -126,7 +126,7 @@ export function switchSpotlight(
 
   // Both board edges interpolate with the same progress. A gap at both
   // endpoints leaves a gap throughout, including when resuming from mid-flight.
-  const to = board.getBoundingClientRect();
+  const to = actual.getBoundingClientRect();
   const canvasScale = programme.getBoundingClientRect().width / programme.offsetWidth;
   const duration = motion === "interruption" ? interruptionDuration : spotlightDuration;
   const startTime = programme.ownerDocument.timeline.currentTime;
@@ -136,8 +136,11 @@ export function switchSpotlight(
   if (canvasScale > 0 && to.width > 0) {
     const x = (from.left - to.left) / canvasScale;
     const y = (from.top - to.top) / canvasScale;
-    animate(actual, [{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], travel, startTime);
-    animate(board, [{ transform: `scale(${from.width / to.width})` }, { transform: "none" }], travel, startTime);
+    const layoutWidth = actual.offsetWidth * canvasScale;
+    animate(actual, [
+      { transform: `translate(${x}px, ${y}px) scale(${from.width / layoutWidth})` },
+      { transform: `translate(0, 0) scale(${to.width / layoutWidth})` },
+    ], travel, startTime);
   }
 
   // Only the outgoing artwork survives the cut; it can no longer represent a live scene.

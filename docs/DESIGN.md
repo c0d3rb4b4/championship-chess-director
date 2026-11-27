@@ -72,13 +72,13 @@ After a spotlight, require a 90 s cooldown and 45 s of large-board time. Before 
 
 ## Programme composition
 
-Use a fixed 1920 × 1080 canvas, scaled uniformly. The baseline reserves a 768-square actual board, a right-hand analysis region, a fixed header and a lower strip for recent played notation. Keep orientation fixed unless explicitly changed. In a spotlight retain a 416-square actual board on the left. Keep both player clocks and the side-to-move indication in the header. Give the 768-square analysis board a move rail, source, root move and permanent **ANALYSIS LINE NOT PLAYED** label. Only the actual board has clocks.
+Use a fixed 1920 × 1080 canvas, scaled uniformly. The baseline reserves a 768-square actual board, a right-hand analysis region, a fixed header and a lower strip for recent played notation. Keep orientation fixed unless explicitly changed. In a spotlight retain a 416-square actual board on the left. Keep the side-to-move indication in the header. Put Black’s player row above the actual board and White’s below it, aligned to the board edges. Give the 768-square analysis board a move rail, source, root move and permanent **ANALYSIS LINE NOT PLAYED** label. Only the actual board has clocks.
 
 Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Slide and fade an incoming supporting panel over 760 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars. For a long line, remove trailing whole plies before reducing type size. Keep check, mate, capture, castling, disambiguation and promotion marks intact.
 
 ### Score strip, board identity and motion
 
-The reference broadcast gives the board the most area, keeps clocks in a fixed strip, and assigns one purpose to each supporting graphic. Use the right-side area for engine analysis. The product needs neither a camera feed nor event artwork. The fixed header pairs the event and side to move with an ivory player strip. An underline and vermilion digits identify the running clock. Keep this header at the same coordinates during spotlight playback. Give each board its own label and reserve clocks for the actual game.
+Keep the event and turn in the fixed header and the engine comparison to the right. Each ivory player row carries the side, name, an optional country flag and the clock. An underline and vermilion digits identify the running clock. Move and scale the actual board and its two rows together during the spotlight. The flag assets are bundled locally from [flag-icons](https://github.com/lipis/flag-icons).
 
 | Element | Treatment at 1080p |
 |---|---|
@@ -86,11 +86,11 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 | Clocks and scores | Ivory (#F7F5EF) with dark ink. Tabular digits and fixed allocation for both clocks. |
 | Board | Planned brushed-silver and graphite squares, bold monochrome pieces and a cool blue-grey last-move tint. See the board specification below. |
 | Graphic labels | Compact rectangular slugs, condensed uppercase headings, sentence case for continuations. Name each engine. |
-| Outcome display | Show independent White win, Draw and Black win percentages from a verified root or named candidate. The comparison sheet also uses these values for the segmented bar. |
+| Engine evaluation | Stockfish uses a horizontal White-perspective pawn bar, centred at zero and saturated at ±5, with the signed score beside it. Leela uses a segmented bar for White win, Draw and Black win percentages from a verified root or named candidate. |
 
 | Change | First visible frame | Motion |
 |---|---|---|
-| Enter spotlight | Full actual board in motion with both clocks anchored | The live board travels down and left and scales to 416 px as the labelled analysis board and rail slide in from the right edge. The boards share a 1.05 s timeline and ease to a stop with a gap between them throughout. |
+| Enter spotlight | Full actual board and both player rows in motion | The live board travels down and left and scales to 416 px as the labelled analysis board and rail slide in from the right edge. The boards share a 1.05 s timeline and ease to a stop with a gap between them throughout. |
 | End spotlight at the same position | Actual board grows back into the main layout | The boards reverse along the same 1.05 s path with the same easing and separation. The supporting panel slides in underneath. |
 | Actual move during playback | Publish the accepted position, clocks and played-move strip | Stop the PV and animate the two boards back from their current positions over 750 ms. Reveal the new move tint and supporting move graphic on landing. |
 | Actual move during another programme panel | Publish the accepted position on the anchored live board | Slide the outgoing panel off the right edge over 750 ms, then reveal the tint and move graphic. Keep the move card in place while engines are still pending. |
