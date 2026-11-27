@@ -3,8 +3,13 @@ import { readFileSync } from "node:fs";
 import { decodeGame } from "../src/server/providers/game.ts";
 import { LeelaReplay } from "../src/server/providers/leela.ts";
 import { SesseFullSnapshotRequired, SesseReplay } from "../src/server/providers/sesse.ts";
+import { ProviderCoverage } from "./provider-coverage.mjs";
 
-const recording = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const [path, mode, ...extra] = process.argv.slice(2);
+if (!path || (mode !== undefined && mode !== "--coverage") || extra.length)
+  throw Error("Usage: node --import tsx scripts/replay-providers.mjs RECORDING [--coverage]");
+const coverage = mode === "--coverage" ? new ProviderCoverage() : undefined;
+const recording = JSON.parse(readFileSync(path, "utf8"));
 const leela = new LeelaReplay();
 let game, sesse, subscription, connection;
 const usedConnections = new Set();
@@ -22,6 +27,7 @@ for (const packet of recording.packets) {
       if (packet.event === "disconnect") {
         if (packet.authority !== recording.binding.authority || packet.gameId !== recording.binding.gameId)
           throw Error("Unbound authority disconnect");
+        coverage?.disconnect("authority", receivedMs);
         authorityDisconnected = true;
         game = sesse = subscription = connection = undefined;
         leela.disconnect();
@@ -36,17 +42,22 @@ for (const packet of recording.packets) {
       }
       authorityDisconnected = false;
       game = observation = next;
+      coverage?.authority(next, receivedMs);
       break;
     }
     case "sesse":
       if (!sesse) throw Error("Missing authority");
-      if (packet.event === "disconnect") sesse.disconnect();
-      else {
+      if (packet.event === "disconnect") {
+        sesse.disconnect();
+        coverage?.disconnect("sesse", receivedMs);
+      } else {
         if (typeof packet.version !== "string" || !packet.version) throw Error("Missing X-RGLM");
         try {
           observation = sesse.receive(packet.version, packet.base, body, receivedMs);
+          coverage?.sesse(packet, observation);
         } catch (error) {
           if (!(error instanceof SesseFullSnapshotRequired)) throw error;
+          coverage?.clearEngine("sesse");
           console.error(`Sesse packet at ${receivedMs}: full snapshot required`);
         }
       }
@@ -54,20 +65,32 @@ for (const packet of recording.packets) {
     case "leela":
       if (!game) throw Error("Missing authority");
       if (packet.event === "subscribe") {
-        if (!Number.isSafeInteger(packet.connection) || packet.gameId !== recording.leelaGameId)
+        if (!Number.isSafeInteger(packet.connection) || packet.gameId !== recording.leelaGameId ||
+            (packet.ply !== undefined && packet.ply !== game.moves.length))
           throw Error("Unbound subscription");
         if (usedConnections.has(packet.connection)) throw Error("Reused Leela connection generation");
         usedConnections.add(packet.connection);
+        coverage?.clearEngine("leela");
         connection = packet.connection;
         subscription = leela.subscribe(packet.gameId, game);
       } else if (subscription && packet.connection === connection) {
         if (packet.event === "disconnect") {
           leela.disconnect();
           connection = subscription = undefined;
-        } else observation = subscription(body);
+          if (packet.reason !== "authority root changed") coverage?.disconnect("leela", receivedMs);
+        } else {
+          observation = subscription(body);
+          coverage?.leela(packet, observation);
+        }
       }
       break;
     default: throw Error("Unknown source");
   }
-  if (observation) console.log(JSON.stringify({ source, receivedMs, observation }));
+  if (observation && !coverage) console.log(JSON.stringify({ source, receivedMs, observation }));
+}
+
+if (coverage) {
+  const report = coverage.report();
+  console.log(JSON.stringify(report, null, 2));
+  if (report.pending.length) process.exitCode = 2;
 }

@@ -65,6 +65,22 @@ The duration is in seconds. Ctrl-C finalises the recording early. The recorder c
 
 For M0 evidence, use the normalised replay to find both engines on the same in-play root before and after a move. Confirm substantive search updates as well as idle traffic. Verify the PGN clock convention against the feed during the move. Collect recovery from each source and label any producer-induced close. Independently verify Leela calibration and candidate visit aggregation before enabling them. A byte-identical replay confirms determinism, and the coverage checks establish whether it contains the necessary live events.
 
+### Check recording coverage
+
+After replaying the capture twice, run the coverage report on the same file.
+
+```sh
+node --import tsx scripts/replay-providers.mjs data/game-4-capture.json --coverage
+```
+
+The report gives local receipt times for accepted snapshots, idle traffic, increasing search work and each source's recovery. It looks for both legal engine analyses on two consecutive authoritative in-play plies without an authority gap between them. An authority recovery requires a fresh bound PGN followed by both analyses. Sesse needs a matching full snapshot after its own disconnect. Leela needs a new connection generation with a matching position and candidate after its own disconnect. A socket recycled because the authority root changed does not count as a Leela disconnect.
+
+A report exits with status 0 when it finds all of this packet evidence, or 2 when any item in `pending` remains. Malformed recordings fail replay. The synthetic provider simulation intentionally exits 2 because it lacks independent engine reconnects and some idle traffic. The recording tests add those events and verify that coverage then passes.
+
+Clock coverage requires a current-root annotation on both plies and the explicit `post-move` convention in the recording binding. The report records the clock values and receipt times for comparison with the broadcast clocks. Keep the production binding's clock convention unknown until that comparison is made. Packet coverage also requires independent confirmation of deployment calibration, visit aggregation and provider usage terms for M0 sign-off.
+
+A repeat check beginning at 02:41 UTC on 27 November collected 13 packets from completed Game 3. Two replay runs each emitted the same 11 observations. The report found accepted snapshots and idle traffic for all three providers. It exited 2 with search growth, a shared move, adjacent clock samples and each provider's recovery still missing. Private capture SHA-256 is `c97f327035a52a6ce9d97674fb8396a552be78ee7d2f2adb89835d4950d49c34`.
+
 ### Recorder verification · 27 November 2026 UTC
 
 A 70-second capture from 01:08 UTC collected 14 packets from the completed Game 3, including two empty versioned Sesse deltas and Leela status heartbeats. Two replays emitted the same 12 JSONL observations. The final 120-ply root matched all three sources, with a ½–½ result, Stockfish's Bg5 at depth 130 and nine Leela candidates in evaluation 2804473. The recording remains private. SHA-256 of the capture is `74ae93ad9ed7888f718e246155ae6a7f00bf0fa1be7f0e407da07d2a95963b1e`.
@@ -81,7 +97,7 @@ The selected game was Game 3 of the FIDE World Chess Championship in Geneva. The
 | [Sesse](https://analysis.sesse.net/analysis.pl) | At 00:13 UTC the full response carried X-RGLM 1795738381508, engine Stockfish dev-20261115-m-18d93109-asn. Depth, candidate depths and nodes were decimal strings. A poll with that ims returned an empty delta and X-RGLM 1795738411509. | An explicit White alias `Sindarov` plus the exact Black name, history and FEN bound the snapshot. The principal move was Bg5 at depth 130 with a White score of 0.00 pawns and 1,367,603,783 nodes. Nine alternatives retained their individual depths. The idle delta preserved the analysis. |
 | [Leela Live](https://live.lczero.org/) | The deployed client asset referenced revision 98ff2cb0c3c0e80a83f87fa1eb90cb9e42dc191e. Its socket at `/api/ws` advertised game 483 with a feedUrl ending in `/fnmEB1kH/RD8sbYw1`. Subscribing to game 483, ply 120 returned positions, evaluations and a status heartbeat. | The final FEN matched. Evaluation 2804473 supplied nine legal UCI candidate lines, including Bg5 with 233,833 visits. Both position and variation records carried W/D/B fields. Perspective, calibration and the search-share denominator still need independent verification. |
 
-The checked-in tests use original examples. Provider payload redistribution terms have yet to be verified. The finished game supplied a final mainline and archived analysis. In-play move and clock changes, substantive Sesse deltas and evolving Leela evaluations on a common live root still require a capture during play.
+The checked-in tests use original examples. The [Lichess broadcast guide](https://lichess.org/broadcast/help) and [service terms](https://lichess.org/terms-of-service) describe broadcast access. Permission to redistribute the deployed event feed and engine payloads remains unverified. The finished game supplied a final mainline and archived analysis. In-play move and clock changes, substantive Sesse deltas and evolving Leela evaluations on a common live root still require a capture during play.
 
 The private recording `game-3-provider-replay.json` contains 16 timestamped packets including a client-initiated close, fresh HTTP reads and a second WebSocket subscription. Both generations reconstructed the same final Leela evaluation. Replaying twice with the command above emitted 11 byte-identical JSONL observations per run. Recording SHA-256: `a2c77f860bba6922310de086feb0acfe845eb3937c6de2bf70bae431551d903f`. Output SHA-256: `d73277fc2ab150c3cc8a4edc830d7d6cb1c87db6ceff18cd1635bc84eb2f4cb6`.
 
