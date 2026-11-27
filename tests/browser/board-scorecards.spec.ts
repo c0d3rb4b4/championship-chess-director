@@ -11,8 +11,9 @@ test("capture board-side player rows and both evaluation bars", { tag: "@review-
   const comparison = director.advanceTo(6000);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/programme", route => route.fulfill({ json: comparison }));
-  const send = await programmeStream(page);
+  const send = await programmeStream(page, comparison);
   await page.goto("/programme");
+  await expect(page.locator(".connection-banner")).toBeHidden();
   const actual = page.getByTestId("actual-board");
   const black = page.getByRole("group", { name: "Black", exact: true });
   const white = page.getByRole("group", { name: "White", exact: true });
