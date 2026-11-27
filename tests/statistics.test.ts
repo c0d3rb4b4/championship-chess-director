@@ -33,24 +33,32 @@ test("same-side post-move observations account for increments, bonuses, gaps and
   assert.equal(duration(undefined,{...org,suppliedMs:0}),0);
   const d = new Director();
   const times = d.advanceTo(110000).moveTimes;
+  assert.deepEqual(times.slice(0,2).map(m => m.elapsedMs),[130000,70000]);
+  assert.equal(times.some(m => m.elapsedMs === null), false);
   assert.deepEqual(times.slice(-2).map(m => m.elapsedMs),[83000,27000]);
   assert.deepEqual(d.advanceTo(300000).moveTimes,times);
 });
 
 test("history freezes against release time and invalidates a corrected suffix", () => {
   const d = new Director();
-  const frozen = d.advanceTo(83000).history[0];
+  const opening = d.snapshot().history;
+  const base = demo.moves.length;
+  assert.deepEqual(opening.map(row => row.ply), Array.from({ length: base + 1 }, (_, ply) => ply));
+  assert.equal(opening[0].sesse?.pawns, demo.openingHistory[0].pawns);
+  assert.deepEqual(opening[0].leela?.percentages, demo.openingHistory[0].percentages);
+  const frozen = d.advanceTo(83000).history[base];
   assert.equal(frozen.leela?.version,3);
-  assert.deepEqual(d.advanceTo(92000).history[0],frozen);
+  assert.deepEqual(d.advanceTo(92000).history[base],frozen);
   const rows = d.advanceTo(110000).history;
-  assert.equal(rows[1].sesse?.pawns,0.18);
-  assert.equal(rows[2].leela,undefined);
+  assert.deepEqual(rows.slice(0, base), opening.slice(0, base));
+  assert.equal(rows[base + 1].sesse?.pawns,0.18);
+  assert.equal(rows[base + 2].leela,undefined);
   const rebuilt = new FixtureHistory().rows([...demo.moves,"h3"],110000,validateFixtures(),1,{fromPly:19,revision:2});
-  assert.deepEqual(rebuilt[0],frozen);
-  assert.notEqual(rebuilt[1].rootKey,rows[1].rootKey);
-  assert.equal(rebuilt[1].revision,2);
-  assert.equal(rebuilt[1].sesse,undefined);
-  assert.equal(rebuilt[1].leela,undefined);
+  assert.deepEqual(rebuilt[base],frozen);
+  assert.notEqual(rebuilt[base + 1].rootKey,rows[base + 1].rootKey);
+  assert.equal(rebuilt[base + 1].revision,2);
+  assert.equal(rebuilt[base + 1].sesse,undefined);
+  assert.equal(rebuilt[base + 1].leela,undefined);
 });
 
 test("ordinary deadlines skip unavailable panels, reject zero and preempt every entrance", () => {

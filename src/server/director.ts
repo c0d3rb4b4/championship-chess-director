@@ -124,7 +124,7 @@ export class Director {
     });
   }
   private moveTimes(moves: string[]): MoveTime[] {
-    const previous: (number | undefined)[] = [];
+    const previous: (number | undefined)[] = [demo.startingClockMs, demo.startingClockMs];
     const observations = new Map(demo.postMoveClocks.map(c => [c.ply, c]));
     return moves.map((san, index) => {
       const ply = index + 1;

@@ -51,6 +51,51 @@ export function revealPanel(panel: HTMLElement, delay = 0): void {
   ], { duration: 760, delay, easing: panelEase, fill: "backwards" });
 }
 
+function depart(layer: HTMLElement, frames: Keyframe[], timing: KeyframeAnimationOptions, startTime: CSSNumberish | null): void {
+  layer.dataset.departing = "";
+  layer.inert = true;
+  layer.setAttribute("aria-hidden", "true");
+  layer.querySelectorAll("[data-testid]").forEach(node => node.removeAttribute("data-testid"));
+  const animation = animate(layer, frames, { ...timing, fill: "forwards" }, startTime);
+  departing = { layer, animation };
+  animation.addEventListener("finish", () => {
+    if (departing?.animation !== animation) return;
+    layer.remove();
+    departing = undefined;
+    const settled = showPendingHighlight();
+    settled?.querySelectorAll("[data-last-move-square]").forEach(square => {
+      animate(square, [{ opacity: 0 }, { opacity: 1 }], {
+        duration: 220,
+        easing: panelEase,
+        fill: "backwards",
+      });
+    });
+  }, { once: true });
+}
+
+function revealPlayedMove(board: HTMLElement, panel: HTMLElement, delay: number): void {
+  board.dataset.moveHighlightPending = "";
+  pendingHighlight = board;
+  revealPanel(panel, delay);
+}
+
+function pose(element: HTMLElement): Keyframe {
+  const style = getComputedStyle(element);
+  return { transform: style.transform, opacity: style.opacity };
+}
+
+export function interruptPanel(programme: HTMLElement, markup: string): void {
+  const panel = programme.querySelector<HTMLElement>(".comparison-panel:not([data-departing])")!;
+  const board = programme.querySelector<HTMLElement>(".actual-board-wrap")!;
+  const from = pose(panel);
+  cutProgrammeMotion();
+  panel.insertAdjacentHTML("beforebegin", markup);
+  const next = panel.previousElementSibling as HTMLElement;
+  depart(panel, [from, { transform: `translateX(${programme.offsetWidth - panel.offsetLeft}px)`, opacity: 0 }],
+    { duration: interruptionDuration, easing: travelEase }, programme.ownerDocument.timeline.currentTime);
+  revealPlayedMove(board, next, interruptionDuration);
+}
+
 export function switchSpotlight(
   programme: HTMLElement,
   spotlight: boolean,
@@ -63,8 +108,7 @@ export function switchSpotlight(
     spotlight ? ".comparison-panel:not([data-departing])" : ".spotlight-layer",
   )!;
   const from = motion === "cut" ? undefined : board.getBoundingClientRect();
-  const leavingStyle = getComputedStyle(leaving);
-  const leavingStart = { transform: leavingStyle.transform, opacity: leavingStyle.opacity };
+  const leavingStart = pose(leaving);
   cutProgrammeMotion(leaving);
 
   actual.classList.toggle("large-actual", !spotlight);
@@ -97,43 +141,20 @@ export function switchSpotlight(
   }
 
   // Only the outgoing artwork survives the cut; it can no longer represent a live scene.
-  leaving.dataset.departing = "";
-  leaving.inert = true;
-  leaving.setAttribute("aria-hidden", "true");
-  leaving.querySelectorAll("[data-testid]").forEach(node => node.removeAttribute("data-testid"));
-  const departure = animate(leaving, [
+  depart(leaving, [
     leavingStart,
     spotlight ? { transform: "translate(80px, -32px) scale(.97)", opacity: 0 }
       : { transform: offRight, opacity: 1 },
   ], {
     duration: spotlight ? 460 : duration,
     easing: spotlight ? panelEase : travelEase,
-    fill: "forwards",
   }, startTime);
-  departing = { layer: leaving, animation: departure };
-  departure.addEventListener("finish", () => {
-    if (departing?.animation !== departure) return;
-    leaving.remove();
-    departing = undefined;
-    const settled = showPendingHighlight();
-    settled?.querySelectorAll("[data-last-move-square]").forEach(square => {
-      animate(square, [{ opacity: 0 }, { opacity: 1 }], {
-        duration: 220,
-        easing: panelEase,
-        fill: "backwards",
-      });
-    });
-  }, { once: true });
 
   if (spotlight) {
     animate(incoming, [{ transform: offRight }, { transform: "none" }], travel, startTime);
     animate(position, [{ opacity: 0 }, { opacity: 1 }],
       { duration: 280, delay: duration - 280, easing: panelEase, fill: "backwards" });
-  } else {
-    if (motion === "interruption") {
-      board.dataset.moveHighlightPending = "";
-      pendingHighlight = board;
-    }
-    revealPanel(incoming, motion === "interruption" ? duration : 360);
-  }
+  } else if (motion === "interruption") {
+    revealPlayedMove(board, incoming, duration);
+  } else revealPanel(incoming, 360);
 }

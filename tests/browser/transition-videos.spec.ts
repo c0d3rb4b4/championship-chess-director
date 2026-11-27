@@ -16,6 +16,7 @@ const clips = [
     holdMs: 2000,
   },
   { name: "04-move-interruption", moments: [move - 1, move, 89_000, 90_000, 96_000], holdMs: 2000 },
+  { name: "05-statistics-interruption", moments: [38_000, "release-move", 89_000, 90_000], holdMs: 1600 },
 ] as const;
 
 test.use({ viewport, reducedMotion: "no-preference", video: { mode: "on", size: viewport } });

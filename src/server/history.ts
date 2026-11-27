@@ -7,10 +7,11 @@ export class FixtureHistory {
   rows(moves: string[], elapsedMs: number, positions: ReturnType<typeof validateFixtures>,
        epoch: number, correction?: { fromPly: number; revision: number }): HistoryRow[] {
     const rows: HistoryRow[] = [];
-    for (let ply = demo.moves.length; ply <= moves.length; ply++) {
+    for (let ply = 0; ply <= moves.length; ply++) {
       const next = demo.events[ply - demo.moves.length];
       const frozen = next && next.atMs <= elapsedMs;
-      const cutoffMs = frozen ? next.atMs : elapsedMs;
+      const opening = ply < demo.moves.length;
+      const cutoffMs = opening ? 0 : frozen ? next.atMs : elapsedMs;
       const revision = correction && ply >= correction.fromPly ? correction.revision : 1;
       const prefix = moves.slice(0, ply);
       const identity = JSON.stringify([epoch, revision, prefix]);
@@ -19,7 +20,16 @@ export class FixtureHistory {
         key = rootKey(demo.id, epoch, revision, prefix);
         this.rootKeys.set(identity, key);
       }
-      const row: HistoryRow = { ply, san: moves[ply-1], rootKey: key, revision, cutoffMs };
+      const row: HistoryRow = { ply, san: moves[ply-1] ?? "", rootKey: key, revision, cutoffMs };
+      // Hand-authored history for the positions preceding the replay's first
+      // live-style sample. These rows never enter the engine readiness feed.
+      const prior = opening && demo.openingHistory[ply];
+      if (revision === 1 && prior && prefix.every((san, i) => san === demo.moves[i])) {
+        const meta = { observedMs: 0, version: 1 };
+        const percentages = outcomes({ values: prior.percentages, scale: 100, perspective: "white", scope: "root" }, false);
+        row.sesse = { ...meta, pawns: prior.pawns };
+        if (percentages) row.leela = { ...meta, percentages };
+      }
       for (const id of ["sesse", "leela"] as const) {
         const position = positions[id].get(ply);
         const sample = position?.revisions.filter(r => frozen ? r.atMs < cutoffMs : r.atMs <= cutoffMs).at(-1);

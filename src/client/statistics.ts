@@ -11,6 +11,9 @@ function chart(labels: string[], series: Series[], unit: string, fixedMaximum?: 
   const low = Math.min(0, ...values);
   const high = fixedMaximum ?? Math.max(1, ...values);
   const x = (i: number) => 100 + 690 * i / Math.max(1, labels.length - 1);
+  const labelCount = Math.min(7, labels.length);
+  const labelIndices = Array.from({ length: labelCount }, (_, i) =>
+    Math.round(i * (labels.length - 1) / Math.max(1, labelCount - 1)));
   const y = (n: number) => 178 - 135 * (n-low) / (high-low);
   const ticks = [low, (low+high)/2, high].map(n =>
     `<path d="M96 ${y(n)}h706" stroke="#505451"/><text x="80" y="${y(n)+6}" text-anchor="end">${number(n)}</text>`).join("");
@@ -19,30 +22,28 @@ function chart(labels: string[], series: Series[], unit: string, fixedMaximum?: 
     const dots = line.values.map((value,i) => {
       if (value === null) return "";
       path += `${i === 0 || line.values[i-1] === null ? "M" : "L"}${x(i)} ${y(value)} `;
-      return `<circle cx="${x(i)}" cy="${y(value)}" r="6"/>`;
+      return `<circle cx="${x(i)}" cy="${y(value)}" r="${Math.max(2, Math.min(6, 220 / labels.length))}"/>`;
     }).join("");
     return `<g fill="${colours[j]}"><path d="${path}" fill="none" stroke="${colours[j]}" stroke-width="4"/>${dots}</g>`;
   }).join("");
   return `<div class="stat-chart"><div class="legend">${series.map((s,i) => `<span style="--line:${colours[i]}">${e(s.name)}</span>`).join("")}</div>
     <svg viewBox="0 0 860 235" role="img" aria-label="${e(unit)}"><text x="20" y="22">${e(unit)}</text>${ticks}${lines}
-    ${labels.map((s,i) => `<text x="${x(i)}" y="216" text-anchor="middle">${e(s)}</text>`).join("")}</svg></div>`;
+    ${labelIndices.map(i => `<text x="${x(i)}" y="216" text-anchor="middle">${e(labels[i])}</text>`).join("")}</svg></div>`;
 }
 function timePanel(s: ProgrammeSnapshot): string {
-  const first = s.moveTimes.find(m => m.elapsedMs !== null);
-  if (!first) return "";
-  const start = Math.ceil(first.ply / 2);
   const totals = [0,0];
-  const series: Series[] = [{ name: "White", values: [] }, { name: "Black", values: [] }];
-  const labels: string[] = [];
-  for (let move = start; move <= Math.ceil(s.game.ply/2); move++) {
+  const series: Series[] = [{ name: "White", values: [0] }, { name: "Black", values: [0] }];
+  const elapsed = new Map(s.moveTimes.map(m => [m.ply, m.elapsedMs]));
+  const labels = ["0"];
+  for (let move = 1; move <= Math.ceil(s.game.ply/2); move++) {
     labels.push(String(move));
     for (let side = 0; side < 2; side++) {
-      const ms = s.moveTimes[(move-1)*2+side]?.elapsedMs;
+      const ms = elapsed.get(move * 2 - 1 + side);
       if (ms != null) totals[side] += ms;
       series[side].values.push(ms == null ? null : totals[side]/60000);
     }
   }
-  return `<h2>Time used since move ${start}</h2>
+  return `<h2>Time used since game start</h2>
     <div class="time-totals">${series.map((line,i) => `<div><span>${line.name} · recorded</span><strong>${number(totals[i]/60000)} min</strong></div>`).join("")}</div>
     ${chart(labels,series,"Minutes on completed moves")}<p class="axis-label">Move number</p>`;
 }
@@ -60,7 +61,7 @@ export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,numbe
         ${engine.visitShares ? `<div class="shares">${engine.visitShares.map(v => `<span>${e(v.san)} &nbsp;${number(v.percent)}%</span>`).join("")}</div>` : ""}` : "<p>Updating for this position</p>"}</section>`).join("")}`;
   } else if (s.panel === "history") {
     const rows = s.history;
-    const labels = rows.map(row => `${Math.ceil(row.ply/2)}${row.ply%2 ? "." : "…"}${row.san}`);
+    const labels = rows.map(row => row.ply === 0 ? "0" : `${Math.ceil(row.ply/2)}${row.ply%2 ? "." : "…"}${row.san}`);
     body = `<h2>Evaluation history</h2>
       ${chart(labels,[{name:"Stockfish · White evaluation",values:rows.map(r => r.sesse?.pawns ?? null)}],"Pawns")}
       ${chart(labels,["White win","Draw","Black win"].map((name,i) => ({name,values:rows.map(r => r.leela?.percentages[i] ?? null)})), "Leela · Probability (%)",100)}`;

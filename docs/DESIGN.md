@@ -93,11 +93,14 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 | Enter spotlight | Full actual board in motion with both clocks anchored | The live board travels down and left and scales to 416 px as the labelled analysis board and rail slide in from the right edge. The boards share a 1.05 s timeline and ease to a stop with a gap between them throughout. |
 | End spotlight at the same position | Actual board grows back into the main layout | The boards reverse along the same 1.05 s path with the same easing and separation. The supporting panel slides in underneath. |
 | Actual move during playback | Publish the accepted position, clocks and played-move strip | Stop the PV and animate the two boards back from their current positions over 750 ms. Reveal the new move tint and supporting move graphic on landing. |
+| Actual move during another programme panel | Publish the accepted position on the anchored live board | Slide the outgoing panel off the right edge over 750 ms, then reveal the tint and move graphic. Keep the move card in place while engines are still pending. |
 | Next PV ply or clock tick | Advance the current frame or digits | Retain label positions. No scene entrance. |
 | Reconnect, refresh, reduced motion | Render the eligible snapshot | Direct cut. Never queue a missed animation. |
 | WDL and history updates | Publish the new eligible value or point | Smooth bar width only within a root. Clear obsolete values immediately on a root change. |
 
 The pilot client receives full SSE snapshots. The director owns scene timing and the sequence of hypothetical plies. The browser starts motion on a change of scene instance and preserves animated elements through clock and evaluation updates. The departing analysis freezes as artwork during a return or a consecutive played move. Corrections, discontinuous snapshots, disconnects and resnapshots clear the artwork and cancel the prior motion.
+
+Evaluation history and cumulative move time begin at move 0 and extend through the latest played position. Cumulative time starts at zero for both players. The evaluation chart plots the recorded starting-position sample when available. Missing samples remain gaps. Axis labels thin as history grows while the plot retains each recorded point.
 
 See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
 
