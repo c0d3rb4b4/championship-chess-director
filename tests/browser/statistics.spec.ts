@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { Director } from "../../src/server/director.js";
 import type { ProgrammeSnapshot } from "../../src/shared/types.js";
+import { programmeStream } from "./programme-stream.js";
 
 test("ordinary panels fit both broadcast sizes with typical, missing and extended values", { tag: "@review-captures" }, async ({page}) => {
   test.setTimeout(90000);
@@ -53,17 +54,7 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
 
 test("panel transitions preserve the board and clocks and yield immediately to the played move", async ({page}) => {
   // Inject ordered observations into the same listener used by the live SSE connection.
-  await page.addInitScript(() => {
-    class RehearsalStream extends EventTarget {
-      constructor() {
-        super();
-        window.addEventListener("rehearsal", event => this.dispatchEvent(
-          new MessageEvent("snapshot",{data:(event as CustomEvent).detail})));
-      }
-      close() {}
-    }
-    Object.defineProperty(window,"EventSource",{value:RehearsalStream});
-  });
+  const send = await programmeStream(page);
   for (const motion of ["reduce","no-preference"] as const) {
     await page.emulateMedia({reducedMotion:motion});
     for (const time of [20000,38000,58000,74000]) {
@@ -76,8 +67,6 @@ test("panel transitions preserve the board and clocks and yield immediately to t
       const originalBoard = await board.elementHandle();
       const strip = page.locator(".players");
       const bounds = await strip.boundingBox();
-      const send = (s: ProgrammeSnapshot) => page.evaluate(json =>
-        window.dispatchEvent(new CustomEvent("rehearsal",{detail:json})),JSON.stringify(s));
       const entering = director.advanceTo(time);
       await send(entering);
       await expect(page.locator("[data-panel]")).toHaveAttribute("data-panel",entering.panel);
