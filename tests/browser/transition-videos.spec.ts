@@ -22,12 +22,13 @@ test.describe("720p programme transition clips", { tag: "@review-captures" }, ()
       const director = new Director();
       const [start, ...cues] = moments;
       const initial = director.advanceTo(start);
-      const send = await programmeStream(page);
+      const send = await programmeStream(page, initial);
       await page.route("**/api/programme", route => route.fulfill({ json: initial }));
       await page.goto("/programme");
       const output = page.getByTestId("programme");
       const actual = page.getByTestId("actual-board");
       await expect(output).toHaveAttribute("data-instance", initial.scene.instance);
+      await expect(page.locator(".connection-banner")).toBeHidden();
       // Hold each cue on screen for review. The programme plays its normal entrance animation.
       await page.waitForTimeout(900);
       for (const time of cues) {
