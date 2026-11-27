@@ -115,4 +115,107 @@ test("coverage rejects an archived result as evidence of in-play search or clock
   assert.equal(evidence.sesse.workAt, null);
   assert.equal(evidence.sharedMove, null);
   assert.equal(evidence.clockedSharedMove, null);
+  assert.equal(evidence.observedClockedSharedMove, null);
+});
+
+test("coverage reports raw clock annotations with an unverified convention", t => {
+  const dir = mkdtempSync(join(tmpdir(), "provider-clock-audit-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, "capture.json");
+  const recording = JSON.parse(readFileSync("fixtures/provider-simulation.json", "utf8"));
+  recording.binding.clockConvention = "unknown";
+  const before = recording.packets.find((row: { receivedMs: number }) => row.receivedMs === 0);
+  const after = recording.packets.find((row: { receivedMs: number }) => row.receivedMs === 7);
+  const corrected = { ...before, body: before.body.replace("0:09:58", "0:09:57.875"), receivedMs: 6.5 };
+  const completed = { ...after, body: after.body.replace("0:09:54", "0:09:54.125"), receivedMs: 11.5 };
+  after.body = after.body.replace(" {[%clk 0:09:54]}", "");
+  recording.packets.push(corrected, { ...corrected, receivedMs: 6.75 }, completed);
+  recording.packets.sort((a: { receivedMs: number }, b: { receivedMs: number }) => a.receivedMs - b.receivedMs);
+  writeFileSync(file, JSON.stringify(recording));
+  const run = (...args: string[]) => spawnSync(process.execPath,
+    ["--import", "tsx", "scripts/replay-providers.mjs", file, ...args], { encoding: "utf8" });
+
+  const coverage = run("--coverage");
+  assert.equal(coverage.status, 2, coverage.stderr);
+  const { evidence, pending } = JSON.parse(coverage.stdout);
+  assert.equal(evidence.clockedSharedMove, null);
+  assert.ok(pending.includes("post-move clock samples on both sides of a shared move"));
+  assert.deepEqual(evidence.observedClockedSharedMove, {
+    before: {
+      ply: 1, authorityAt: 0, sesseAt: 1, leelaAt: 4,
+      annotation: { ply: 1, san: "e4", mover: "white", seconds: 597.875, pgnClock: "0:09:57.875", receivedMs: 6.5 },
+    },
+    after: {
+      ply: 2, authorityAt: 7, sesseAt: 9, leelaAt: 11,
+      annotation: { ply: 2, san: "e5", mover: "black", seconds: 594.125, pgnClock: "0:09:54.125", receivedMs: 11.5 },
+    },
+  });
+
+  const replay = run();
+  assert.equal(replay.status, 0, replay.stderr);
+  const authority = replay.stdout.trim().split("\n").map(row => JSON.parse(row)).filter(row => row.source === "authority");
+  assert.ok(authority.length > 0);
+  for (const { observation } of authority) {
+    assert.deepEqual(observation.clocks, []);
+    assert.equal(Object.hasOwn(observation, "clockAnnotation"), false);
+  }
+});
+
+test("coverage audits Leela fields by root, connection and evaluation", t => {
+  const dir = mkdtempSync(join(tmpdir(), "provider-field-audit-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const file = join(dir, "capture.json");
+  const recording = JSON.parse(readFileSync("fixtures/provider-simulation.json", "utf8"));
+  const first = recording.packets.find((row: { receivedMs: number }) => row.receivedMs === 4);
+  const [position] = first.body.positions;
+  const [evaluation] = first.body.evaluations;
+  const outcome = { scoreW: 0, scoreD: 720, scoreB: 280 };
+  first.body = {
+    positions: [{ ...position, nodes: 100, ...outcome }],
+    evaluations: [{ ...evaluation, nodes: 100, variations: [
+      { pvUci: "e7e5", nodes: 72, ...outcome },
+    ] }],
+  };
+  const patch = (receivedMs: number, row: object) => ({ ...first, receivedMs, body: { evaluations: [row] } });
+  const atNextRoot = recording.packets.findIndex((row: { receivedMs: number }) => row.receivedMs === 7);
+  recording.packets.splice(atNextRoot - 1, 1,
+    patch(5.25, { ...evaluation, variations: [{ pvUci: "c7c5", nodes: 20, scoreW: 1 }] }),
+    patch(5.5, { ...evaluation, evalId: 2, nodes: 200, variations: [
+      { pvUci: "c7c5", nodes: 29 }, { nodes: 15 },
+    ] }),
+    patch(5.75, { ...evaluation, nodes: 1, variations: [{ pvUci: "e7e5", nodes: 1 }] }),
+    { ...first, receivedMs: 6, body: { status: {} } },
+    { ...first, receivedMs: 6.25, body: { positions: [{ ...position, fen: "wrong", ...outcome }] } },
+    patch(6.5, { ...evaluation, evalId: 3, nodes: 70, variations: [{ pvUci: "e7e5", nodes: 60 }] }),
+  );
+  writeFileSync(file, JSON.stringify(recording));
+
+  const replay = (args: string[]) => spawnSync(process.execPath,
+    ["--import", "tsx", "scripts/replay-providers.mjs", file, ...args], { encoding: "utf8" });
+  const report = replay(["--coverage"]);
+  assert.equal(report.status, 2, report.stderr);
+  const { fieldSamples } = JSON.parse(report.stdout).evidence.leela;
+  assert.deepEqual(fieldSamples.map((sample: { receivedMs: number }) => sample.receivedMs), [4, 5.25, 5.5, 11, 18]);
+  assert.deepEqual(fieldSamples[0].position.fields, {
+    nodes: 100, wdl: { status: "per-mille", values: [0, 720, 280] },
+  });
+  assert.deepEqual(fieldSamples[0].evaluation, {
+    evalId: 1, totalNodes: 100, namedCandidates: 1, namedNodes: 72, remainingNodes: 28,
+    candidateWdl: { "per-mille": 1, missing: 0, invalid: 0 },
+  });
+  assert.deepEqual(fieldSamples[1].evaluation, {
+    evalId: 1, totalNodes: 100, namedCandidates: 2, namedNodes: 92, remainingNodes: 8,
+    candidateWdl: { "per-mille": 1, missing: 0, invalid: 1 },
+  });
+  assert.deepEqual(fieldSamples[2].evaluation, {
+    evalId: 2, totalNodes: 200, namedCandidates: 1, namedNodes: 29, remainingNodes: 171,
+    candidateWdl: { "per-mille": 0, missing: 1, invalid: 0 },
+  });
+  assert.equal(fieldSamples[3].position.fields.wdl.status, "missing");
+  assert.equal(fieldSamples[3].evaluation.totalNodes, null);
+  assert.equal(fieldSamples[3].evaluation.remainingNodes, null);
+  assert.equal(fieldSamples[4].connection, 3);
+  const normalized = replay([]);
+  assert.equal(normalized.status, 0, normalized.stderr);
+  assert.doesNotMatch(normalized.stdout, /fieldSamples|remainingNodes|candidateWdl/);
 });

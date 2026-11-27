@@ -14,7 +14,9 @@ export interface Binding {
 
 }
 
-export function decodeGame(binding: Binding, authority: string, gameId: string, pgn: string) {
+export function decodeGame(
+  binding: Binding, authority: string, gameId: string, pgn: string, { inspectClock = false } = {},
+) {
   if (authority !== binding.authority || gameId !== binding.gameId) throw Error("Unbound authority");
   const game = new Chess();
   game.loadPgn(pgn, { strict: true });
@@ -24,12 +26,26 @@ export function decodeGame(binding: Binding, authority: string, gameId: string, 
       (h.FEN ?? DEFAULT_POSITION) !== binding.startFen) throw Error("Unbound game");
   const moves = game.history();
   const result = ["1-0", "0-1", "1/2-1/2"].includes(h.Result) ? h.Result : undefined;
-  // PGN clock annotations use hours:minutes:seconds, with optional decimals.
   const clocks = binding.clockConvention === "post-move" ? game.getComments().flatMap(comment => {
-    const match = /\[%clk (\d+):([0-5]\d):([0-5]\d(?:\.\d+)?)\]/.exec(comment.comment);
-    return match ? [{ fen: comment.fen, seconds: +match[1] * 3600 + +match[2] * 60 + +match[3] }] : [];
+    const clock = parseClock(comment.comment);
+    return clock ? [{ fen: comment.fen, seconds: clock.seconds }] : [];
   }) : [];
-  return { white: h.White, black: h.Black, clocks, binding: { ...binding }, moves, fen: game.fen(), result };
+  const clock = inspectClock && moves.length ? parseClock(game.getComment()) : undefined;
+  return {
+    white: h.White, black: h.Black, clocks, binding: { ...binding }, moves, fen: game.fen(), result,
+    ...(clock && { clockAnnotation: {
+      ...clock, ply: moves.length, san: moves[moves.length - 1], mover: game.turn() === "b" ? "white" : "black",
+    } }),
+  };
+}
+
+function parseClock(comment = "") {
+  // PGN clock annotations use hours:minutes:seconds, with optional decimals.
+  const match = /\[%clk ((\d+):([0-5]\d):([0-5]\d(?:\.\d+)?))\]/.exec(comment);
+  if (!match) return;
+  const [, pgnClock, hours, minutes, seconds] = match;
+  const totalSeconds = +hours * 3600 + +minutes * 60 + +seconds;
+  if (Number.isFinite(totalSeconds)) return { pgnClock, seconds: totalSeconds };
 }
 
 export type Game = ReturnType<typeof decodeGame>;

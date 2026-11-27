@@ -33,7 +33,7 @@ for (const packet of recording.packets) {
         leela.disconnect();
         break;
       }
-      const next = decodeGame(recording.binding, packet.authority, packet.gameId, body);
+      const next = decodeGame(recording.binding, packet.authority, packet.gameId, body, { inspectClock: !!coverage });
       if (!game || JSON.stringify(next.moves) !== JSON.stringify(game.moves)) {
         leela.disconnect();
         connection = subscription = undefined;
