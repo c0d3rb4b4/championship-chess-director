@@ -108,3 +108,88 @@ test("capture binds the chapter and preserves the Sesse delta chain across a mov
   assert.equal(observations.filter(row => row.source === "sesse").at(-1).observation.fen,
     observations.filter(row => row.source === "authority").at(-1).observation.fen);
 });
+
+test("operator reconnects are labelled and recover each provider on the same root", async t => {
+  const fixture = JSON.parse(readFileSync("fixtures/provider-replay.json", "utf8"));
+  const [authority, full, , , frame] = fixture.packets;
+  const roundId = "Round001";
+  const binding = { ...fixture.binding, gameId: "Game0001" };
+  const chapter = `https://lichess.org/broadcast/example/round/${roundId}/${binding.gameId}`;
+  const stop = new AbortController();
+  const signal = AbortSignal.any([stop.signal, AbortSignal.timeout(5_000)]);
+  const reconnects = new Set<"authority" | "sesse" | "leela">();
+  const packets: Array<Parameters<Parameters<typeof captureProviders>[1]>[0] & { receivedMs: number }> = [];
+  const events = new EventEmitter();
+  const until = async (check: () => boolean) => {
+    while (!check()) await once(events, "packet", { signal });
+  };
+  const countPackets = (source: string, match: (packet: typeof packets[number]) => boolean) =>
+    packets.filter(packet => packet.source === source && match(packet)).length;
+  const snapshots = (source: string) => countPackets(source, p => !!p.body && !Array.isArray(p.body));
+  const evaluations = () => countPackets("leela", p => !!p.body && "evaluations" in (p.body as object));
+  const disconnects = () => packets.filter(p => p.event === "disconnect" && p.initiatedBy === "operator");
+  let version = 0;
+
+  class Socket extends EventTarget {
+    constructor() {
+      super();
+      queueMicrotask(() => this.emit({ games: [{
+        gameId: fixture.leelaGameId, feedUrl: chapter,
+        player1: { fideId: binding.whiteId }, player2: { fideId: binding.blackId },
+      }] }));
+    }
+    private heartbeat?: ReturnType<typeof setInterval>;
+    send() {
+      queueMicrotask(() => this.emit(frame.body));
+      this.heartbeat = setInterval(() => this.emit({ status: {} }), 5);
+    }
+    close() { clearInterval(this.heartbeat); }
+    private emit(body: unknown) {
+      this.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(body) }));
+    }
+  }
+
+  const capture = captureProviders({ roundId, binding }, packet => {
+    packets.push({ ...packet, receivedMs: packets.length });
+    events.emit("packet");
+  }, signal, {
+    reconnects,
+    openSocket: () => new Socket(),
+    pause: (_, abort) => delay(4, undefined, { signal: abort }),
+    request: async input => {
+      const url = new URL(String(input));
+      if (url.hostname === "lichess.org") return new Response(`[GameURL "${chapter}"]\n${authority.body}`);
+      return Response.json(url.searchParams.has("ims") ? [] : full.body, { headers: { "X-RGLM": String(++version) } });
+    },
+  });
+  try {
+    await until(() => snapshots("sesse") === 1 && evaluations() === 1);
+    reconnects.add("sesse");
+    await until(() => snapshots("sesse") === 2);
+    reconnects.add("leela");
+    await until(() => evaluations() === 2);
+    reconnects.add("authority");
+    await until(() => snapshots("sesse") === 3 && evaluations() === 3);
+  } finally {
+    stop.abort();
+  }
+  const leelaGameId = await capture;
+  assert.deepEqual(disconnects().map(p => p.source), ["sesse", "leela", "authority"]);
+  assert.deepEqual(packets.filter(p => p.event === "subscribe").map(p => [p.connection, p.ply]), [[1, 1], [2, 1], [3, 1]]);
+  assert.ok(packets.filter(p => p.source === "sesse" && p.body && !Array.isArray(p.body)).every(p => p.base === undefined));
+
+  const dir = mkdtempSync(join(tmpdir(), "provider-reconnect-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const recording = join(dir, "recording.json");
+  writeFileSync(recording, JSON.stringify({ binding, leelaGameId, packets }));
+  const replay = spawnSync(process.execPath, ["--import", "tsx", "scripts/replay-providers.mjs", recording, "--coverage"], { encoding: "utf8" });
+  assert.equal(replay.status, 2, replay.stderr);
+  const { evidence } = JSON.parse(replay.stdout);
+  for (const gap of disconnects()) {
+    const recovered = evidence[gap.source].recovered;
+    assert.equal(recovered.initiatedBy, "operator");
+    assert.equal(recovered.disconnectedAt, gap.receivedMs);
+    assert.ok(recovered.recoveredAt > gap.receivedMs);
+  }
+  assert.equal(evidence.sharedMove, null);
+});
