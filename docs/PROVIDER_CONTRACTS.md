@@ -32,7 +32,7 @@ The example reconstructs 1.e4, a Sesse principal line of 1…e5 with a +0.25 Whi
 
 Run the recorder from a host with access to the three feeds. It polls a single Lichess round PGN every 15 seconds, follows the Sesse long-poll version chain and subscribes to the Leela socket. Lichess and Leela must advertise the same chapter and player IDs in the configured colours. A game switch requires a new recording and binding. Each authority root change starts a fresh Leela subscription. An authority gap also resets Sesse to a full read. The timestamps describe local receipt, so use the feed and broadcast clock as independent references when checking in-play timing.
 
-For Game 4 the [Lichess round](https://lichess.org/broadcast/fide-world-chess-championship-2026/game-4/wIwJtPqz) uses round ID `wIwJtPqz` and chapter `IriXvwPw`. Save the following example as `data/game-4-capture-config.json`. Set `binding.event` to the current PGN `Event` header before recording. The scheduled placeholder and the live PGN may use different event strings. The Sesse names below come from the same players' Game 3 feed. Check the aliases against Game 4 when Sesse switches over.
+For Game 4 the [Lichess round](https://lichess.org/broadcast/fide-world-chess-championship-2026/game-4/wIwJtPqz) uses round ID `wIwJtPqz` and chapter `IriXvwPw`. The 27 November preflight found an empty mainline with the expected chapter, round, players and colours. [FIDE schedules play for 28 November at 14:00 UTC](https://worldchampionship.fide.com/schedule). Save the following example as `data/game-4-capture-config.json`. Set `binding.event` to the current PGN `Event` header before recording. The scheduled placeholder and the live PGN may use different event strings. The Sesse names below come from the same players' Game 3 feed. Check the aliases against Game 4 when Sesse switches over.
 
 ```json
 {
@@ -55,13 +55,25 @@ For Game 4 the [Lichess round](https://lichess.org/broadcast/fide-world-chess-ch
 npm ci
 mkdir -p data
 curl -fsS 'https://lichess.org/api/broadcast/round/wIwJtPqz.pgn?clocks=true&comments=false' | sed -n '1,/^$/p'
-node --import tsx scripts/capture-providers.ts data/game-4-capture-config.json data/game-4-capture.json 2700
+node --import tsx scripts/capture-providers.ts data/game-4-capture-config.json data/game-4-capture.json 2700 --interactive
 node --import tsx scripts/replay-providers.mjs data/game-4-capture.json > data/game-4-replay.jsonl
 node --import tsx scripts/replay-providers.mjs data/game-4-capture.json > data/game-4-replay-repeat.jsonl
 cmp data/game-4-replay.jsonl data/game-4-replay-repeat.jsonl
 ```
 
 The duration is in seconds. Ctrl-C finalises the recording early. The recorder creates a new file with owner-only permissions. Keep provider payloads under the ignored `data/` directory until redistribution terms are verified. The file preserves the PGN clock comments, Sesse versions and Leela subscription generations. Provider failures appear on stderr. A Sesse read the decoder rejects is followed by a fresh snapshot request.
+
+### Rehearse a disconnect during the recording
+
+Start with ordinary play long enough to capture both engines before and after an actual move. Then, while the feeds are healthy, type one command at a time into the recorder started with `--interactive`. Let each source recover before requesting the next reconnect. Each command affects only the local recorder.
+
+| Command | Expected capture sequence |
+|---|---|
+| `reconnect sesse` | The recorder skips the next versioned poll, records the gap and fetches a full snapshot without `ims`. |
+| `reconnect leela` | On the next message on the subscribed socket, the recorder drops that message, closes the socket and starts a fresh connection and matching subscription. |
+| `reconnect authority` | The recorder skips the next PGN poll and resets both engine sessions. After a fresh bound PGN, Sesse fetches a full snapshot and Leela subscribes in a fresh connection. |
+
+Commands queue until the relevant source can exercise its reconnect path. Allow for the regular poll and heartbeat intervals. Watch stderr for the reconnect, and keep the recording running for subsequent snapshots. The capture and coverage report label a rehearsed gap with `initiatedBy: "operator"` so the evidence distinguishes it from a provider outage. The default recorder invocation works without a terminal.
 
 For M0 evidence, use the normalised replay to find both engines on the same in-play root before and after a move. Confirm substantive search updates as well as idle traffic. Verify the PGN clock convention against the feed during the move. Collect recovery from each source and label any producer-induced close. Independently verify Leela calibration and candidate visit aggregation before enabling them. A byte-identical replay confirms determinism, and the coverage checks establish whether it contains the necessary live events.
 
@@ -80,6 +92,18 @@ A report exits with status 0 when it finds all of this packet evidence, or 2 whe
 Clock coverage requires a current-root annotation on both plies and the explicit `post-move` convention in the recording binding. The report records the clock values and receipt times for comparison with the broadcast clocks. Keep the production binding's clock convention unknown until that comparison is made. Packet coverage also requires independent confirmation of deployment calibration, visit aggregation and provider usage terms for M0 sign-off.
 
 A repeat check beginning at 02:41 UTC on 27 November collected 13 packets from completed Game 3. Two replay runs each emitted the same 11 observations. The report found accepted snapshots and idle traffic for all three providers. It exited 2 with search growth, a shared move, adjacent clock samples and each provider's recovery still missing. Private capture SHA-256 is `c97f327035a52a6ce9d97674fb8396a552be78ee7d2f2adb89835d4950d49c34`.
+
+### Operator reconnect rehearsal · 27 November 2026 UTC
+
+A capture beginning at 05:57:56 UTC on the completed Game 3 collected 35 packets. Both replays emitted the same 25 observations. Coverage found a full snapshot, idle traffic and a labelled operator-induced disconnect and recovery for each provider on the final game position.
+
+| Feed | Recovery observed | Time from recorded gap to accepted recovery |
+|---|---|---|
+| Sesse | Matching full snapshot without a delta base | 1.4 s |
+| Leela | Candidate analysis on a fresh socket generation with the matching position | 9.7 s |
+| Lichess authority | Bound PGN followed by both matching engine analyses | 23.8 s |
+
+These measurements describe local recorder receipt times on a finished game. Coverage exited 2 with four packet checks outstanding. Game 4 must supply in-play search growth for both engines, matching analysis on both sides of one played move and adjacent clock annotations checked against the broadcast. Leela deployment calibration, visit aggregation and feed usage terms also remain open. Encoded OBS output and viewer comprehension remain Phase 6 checks. Private capture SHA-256 is `f389c5383b4157fa57aeabdc7abce77d2570da5053f4f8cc525516751f6b059f`.
 
 ### Recorder verification · 27 November 2026 UTC
 

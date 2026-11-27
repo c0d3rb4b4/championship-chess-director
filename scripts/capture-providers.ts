@@ -1,6 +1,8 @@
 import { closeSync, openSync, readFileSync, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 import { decodeGame, type Binding, type Game } from "../src/server/providers/game.js";
 import { SesseReplay } from "../src/server/providers/sesse.js";
 
@@ -9,9 +11,21 @@ interface CaptureConfig {
   binding: Binding;
 }
 
+type Source = "authority" | "sesse" | "leela";
+
 interface Packet {
-  source: "authority" | "sesse" | "leela";
+  source: Source;
   [field: string]: unknown;
+}
+
+class OperatorReconnect extends Error {
+  constructor() { super("operator requested reconnect"); }
+}
+
+function disconnectReason(error: unknown) {
+  return error instanceof OperatorReconnect
+    ? { reason: error.message, initiatedBy: "operator" }
+    : { reason: String(error) };
 }
 
 type CaptureSocket = Pick<WebSocket, "addEventListener" | "send" | "close">;
@@ -64,7 +78,10 @@ export async function captureProviders(
   config: CaptureConfig,
   writePacket: (packet: Packet) => void,
   stop: AbortSignal,
-  { request = fetch, openSocket = (url: string): CaptureSocket => new WebSocket(url), pause = wait } = {},
+  {
+    request = fetch, openSocket = (url: string): CaptureSocket => new WebSocket(url), pause = wait,
+    reconnects = new Set<Source>(),
+  } = {},
 ) {
   const { binding, roundId } = config;
   const authorityIdentity = { authority: binding.authority, gameId: binding.gameId };
@@ -97,6 +114,7 @@ export async function captureProviders(
       let game: Game;
       let response: Response;
       try {
+        if (active && reconnects.delete("authority")) throw new OperatorReconnect();
         response = await request(authorityUrl, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
         if (response.status === 429) retryMs = 60_000;
         if (!response.ok) throw Error(`HTTP ${response.status}`);
@@ -108,7 +126,7 @@ export async function captureProviders(
         if (signal.aborted) return;
         diagnose("Lichess", error);
         if (active) {
-          record({ source: "authority", ...authorityIdentity, event: "disconnect", reason: String(error) });
+          record({ source: "authority", ...authorityIdentity, event: "disconnect", ...disconnectReason(error) });
           active.lifetime.abort();
           active = undefined;
         }
@@ -144,6 +162,7 @@ export async function captureProviders(
       let received: Packet | undefined;
       let packet: Packet;
       try {
+        if (base !== undefined && reconnects.delete("sesse")) throw new OperatorReconnect();
         const response = await request(url, {
           signal: AbortSignal.any([signal, session.lifetime.signal, AbortSignal.timeout(50_000)]),
         });
@@ -163,7 +182,7 @@ export async function captureProviders(
         if (base === undefined) retryMs = Math.max(retryMs, 15_000);
         session.sesse.disconnect();
         session.base = undefined;
-        packet = { source: "sesse", event: "disconnect", base, reason: String(error), discarded: received };
+        packet = { source: "sesse", event: "disconnect", base, ...disconnectReason(error), discarded: received };
       }
       record(packet);
       await pause(retryMs, signal);
@@ -179,10 +198,12 @@ export async function captureProviders(
       }
       const root = AbortSignal.any([signal, session.lifetime.signal, session.root.signal]);
       let connection: number | undefined;
+      let requestedReconnect: OperatorReconnect | undefined;
       const ply = session.game.moves.length;
       try {
         const socket = openSocket(leelaUrl);
         await listenToLeela(socket, root, body => {
+          if (connection !== undefined && reconnects.delete("leela")) throw new OperatorReconnect();
           if (connection === undefined) {
             const games = Array.isArray(body.games) ? body.games : [];
             const matches = games.filter(game => matchesChapter(game?.feedUrl, config) &&
@@ -200,10 +221,15 @@ export async function captureProviders(
           record({ source: "leela", connection, body });
         });
       } catch (error) {
+        if (error instanceof OperatorReconnect) requestedReconnect = error;
         diagnose("Leela", error);
       }
-      if (connection !== undefined && !signal.aborted)
-        record({ source: "leela", connection, event: "disconnect", reason: root.aborted ? "authority root changed" : "socket closed" });
+      if (connection !== undefined && !signal.aborted) {
+        const detail = requestedReconnect ? disconnectReason(requestedReconnect) : {
+          reason: root.aborted ? "authority root changed" : "socket closed",
+        };
+        record({ source: "leela", connection, event: "disconnect", ...detail });
+      }
       if (!root.aborted) await pause(5_000, signal);
     }
   }
@@ -223,10 +249,11 @@ export async function captureProviders(
 }
 
 async function main() {
-  const [configPath, output, duration = "2700"] = process.argv.slice(2);
+  const { positionals, values } = parseArgs({ allowPositionals: true, options: { interactive: { type: "boolean" } } });
+  const [configPath, output, duration = "2700", ...extra] = positionals;
   const seconds = Number(duration);
-  if (!configPath || !output || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 28_800)
-    throw Error("Usage: node --import tsx scripts/capture-providers.ts CONFIG OUTPUT [SECONDS: 1–28800]");
+  if (!configPath || !output || extra.length || !Number.isSafeInteger(seconds) || seconds < 1 || seconds > 28_800)
+    throw Error("Usage: node --import tsx scripts/capture-providers.ts CONFIG OUTPUT [SECONDS: 1–28800] [--interactive]");
   const config: CaptureConfig = JSON.parse(readFileSync(configPath, "utf8"));
   if (!/^[a-zA-Z0-9]{8}$/.test(config.roundId) || !/^[a-zA-Z0-9]{8}$/.test(config.binding?.gameId))
     throw Error("Provide the eight-character Lichess roundId and binding.gameId (chapter ID)");
@@ -236,6 +263,19 @@ async function main() {
   const interrupt = () => stop.abort();
   process.once("SIGINT", interrupt);
   process.once("SIGTERM", interrupt);
+  const reconnects = new Set<Source>();
+  const input = values.interactive ? createInterface({ input: process.stdin, terminal: false }) : undefined;
+  if (input) {
+    const commands = "Commands: reconnect authority | reconnect sesse | reconnect leela";
+    console.error(commands);
+    input.on("line", line => {
+      const [command, source, ...extra] = line.trim().split(/\s+/);
+      if (command === "reconnect" && !extra.length && (source === "authority" || source === "sesse" || source === "leela")) {
+        reconnects.add(source);
+        console.error(`Queued ${source} reconnect`);
+      } else if (command) console.error(commands);
+    });
+  }
   const started = new Date().toISOString();
   let count = 0;
   let leelaGameId: number | undefined;
@@ -245,12 +285,13 @@ async function main() {
     leelaGameId = await captureProviders(config, packet => {
       const receivedMs = Math.floor(performance.timeOrigin + performance.now());
       writeFileSync(descriptor, (count++ ? ",\n" : "") + JSON.stringify({ ...packet, receivedMs }));
-    }, AbortSignal.any([stop.signal, AbortSignal.timeout(seconds * 1_000)]));
+    }, AbortSignal.any([stop.signal, AbortSignal.timeout(seconds * 1_000)]), { reconnects });
   } finally {
     try {
       writeFileSync(descriptor, `\n],"leelaGameId":${leelaGameId ?? "null"},"ended":"${new Date().toISOString()}"}\n`);
     } finally {
       closeSync(descriptor);
+      input?.close();
       process.off("SIGINT", interrupt);
       process.off("SIGTERM", interrupt);
     }

@@ -11,8 +11,11 @@ export class ProviderCoverage {
     clockedSharedMove: null,
   };
 
-  disconnect(source, at) {
-    this.pending[source] ??= at;
+  disconnect({ source, receivedMs, initiatedBy }) {
+    this.pending[source] ??= {
+      disconnectedAt: receivedMs,
+      ...(initiatedBy === "operator" ? { initiatedBy } : {}),
+    };
     if (source === "authority") this.current = this.previous = undefined;
     else this.clearEngine(source);
   }
@@ -88,7 +91,7 @@ export class ProviderCoverage {
 
   recover(source, at) {
     if (this.pending[source] === undefined) return;
-    this.evidence[source].recovered ??= { disconnectedAt: this.pending[source], recoveredAt: at };
+    this.evidence[source].recovered ??= { ...this.pending[source], recoveredAt: at };
     delete this.pending[source];
   }
 

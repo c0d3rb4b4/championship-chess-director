@@ -27,7 +27,7 @@ for (const packet of recording.packets) {
       if (packet.event === "disconnect") {
         if (packet.authority !== recording.binding.authority || packet.gameId !== recording.binding.gameId)
           throw Error("Unbound authority disconnect");
-        coverage?.disconnect("authority", receivedMs);
+        coverage?.disconnect(packet);
         authorityDisconnected = true;
         game = sesse = subscription = connection = undefined;
         leela.disconnect();
@@ -49,7 +49,7 @@ for (const packet of recording.packets) {
       if (!sesse) throw Error("Missing authority");
       if (packet.event === "disconnect") {
         sesse.disconnect();
-        coverage?.disconnect("sesse", receivedMs);
+        coverage?.disconnect(packet);
       } else {
         if (typeof packet.version !== "string" || !packet.version) throw Error("Missing X-RGLM");
         try {
@@ -77,7 +77,7 @@ for (const packet of recording.packets) {
         if (packet.event === "disconnect") {
           leela.disconnect();
           connection = subscription = undefined;
-          if (packet.reason !== "authority root changed") coverage?.disconnect("leela", receivedMs);
+          if (packet.reason !== "authority root changed") coverage?.disconnect(packet);
         } else {
           observation = subscription(body);
           coverage?.leela(packet, observation);
