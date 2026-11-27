@@ -1,5 +1,6 @@
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
+import { cutProgrammeMotion, interruptPanel, reducedMotion, revealPanel, switchSpotlight } from "./programme-motion.js";
 import type {
   Command,
   EngineView,
@@ -84,34 +85,36 @@ function supportingPanel(s: ProgrammeSnapshot): string {
            <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
       : s.engines.map(engineSheet).join("");
 }
-function programme(s: ProgrammeSnapshot): string {
-  const spotlight = s.scene.kind === "spotlight";
-
+function spotlightContents(s: ProgrammeSnapshot): string {
   const index = s.scene.frameIndex ?? 0;
-  let scene: string;
-  if (spotlight) {
-    const frames = s.scene.frames!;
-    const engine = s.engines.find(engine => engine.id === s.scene.source);
-    scene = `<section class="mini-actual"><h2 class="board-slug">Actual game</h2>
-        <div class="mini-board">${board(s.actual, "actual")}</div>
-        <p class="mini-position">${e(s.actual.moveLabel)}</p></section>
-      <section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2>
+  const frames = s.scene.frames!;
+  const engine = s.engines.find(engine => engine.id === s.scene.source);
+  return `<section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2>
         <div class="analysis-board" data-frame="${index}">${board(frames[index], "analysis")}</div></section>
       <aside class="variation-rail"><header><h2>${e(engine?.name ?? s.scene.source ?? "Variation")}</h2>
           <span>${index} / ${frames.length - 1} plies</span></header>
         <ol>${frames.slice(1).map((frame, i) =>
           `<li${i + 1 === index ? ' class="current" aria-current="step"' : ""}>${e(frame.moveLabel)}</li>`
         ).join("")}</ol></aside>`;
-  } else {
-    scene = `<section class="large-actual"><h2 class="board-slug">Actual game</h2>
-             <div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
-             <section class="comparison-panel" aria-label="Engine analysis">${supportingPanel(s)}</section>`;
-  }
-  return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
-    <header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
+}
+function supportingScene(s: ProgrammeSnapshot, content: string): string {
+  return s.scene.kind === "spotlight"
+    ? `<div class="spotlight-layer">${spotlightContents(s)}</div>`
+    : `<section class="comparison-panel" aria-label="Engine analysis">${content}</section>`;
+}
+function programmeHeader(s: ProgrammeSnapshot): string {
+  return `<header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
        <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
-       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>
-    ${scene}${playedMoves(s)}
+       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>`;
+}
+function programme(s: ProgrammeSnapshot, support: string): string {
+  const spotlight = s.scene.kind === "spotlight";
+  return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
+    ${programmeHeader(s)}
+    <section class="actual-game ${spotlight ? "mini-actual" : "large-actual"}"><h2 class="board-slug">Actual game</h2>
+      <div class="actual-board-wrap${spotlight ? " mini-board" : ""}">${board(s.actual, "actual")}</div>
+      <p class="mini-position" ${spotlight ? "" : "hidden"}>${e(s.actual.moveLabel)}</p></section>
+    ${supportingScene(s, support)}${playedMoves(s)}
     <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED · Clocks paused</div></main>`;
 }
 function resizeProgramme(): void {
@@ -121,31 +124,65 @@ function resizeProgramme(): void {
       String(Math.min(innerWidth / 1920, innerHeight / 1080)),
     );
 }
-let renderedRoot = "";
+let renderedGame: ProgrammeSnapshot["game"] | undefined;
 let renderedKind = "";
 let renderedInstance = "";
+let renderedSupport = "";
+function isNextPlayedMove(s: ProgrammeSnapshot): boolean {
+  const previous = renderedGame;
+  return Boolean(previous && s.scene.kind === "actual-move" &&
+    s.game.id === previous.id && s.game.epoch === previous.epoch && s.game.revision === previous.revision &&
+    s.game.ply === previous.ply + 1 && previous.moves.every((move, index) => s.game.moves[index] === move));
+}
+
 function renderProgramme(s: ProgrammeSnapshot): void {
   const key = JSON.stringify([s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
     s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
   if (key !== renderKey) {
     const transition = renderedInstance && renderedInstance !== s.scene.instance;
+    const motion = Boolean(transition && connected && !recovering && !reducedMotion.matches);
     renderKey = key;
     const main = app.querySelector<HTMLElement>(".programme");
-    const panel = main?.querySelector(".comparison-panel");
-    if (main && panel && renderedKind === s.scene.kind && renderedRoot === s.game.rootKey) {
-      panel.innerHTML = supportingPanel(s);
+    const spotlight = s.scene.kind === "spotlight";
+    const support = spotlight ? "" : supportingPanel(s);
+    const interrupted = motion && isNextPlayedMove(s);
+    if (main && (renderedGame?.rootKey === s.game.rootKey || interrupted)) {
+      if (interrupted) {
+        // Publish the played position immediately, then reveal its tint on landing.
+        main.querySelector(".actual-board-wrap")!.innerHTML = board(s.actual, "actual");
+        main.querySelector(".mini-position")!.textContent = s.actual.moveLabel;
+        main.querySelector(".programme-header")!.outerHTML = programmeHeader(s);
+        main.querySelector(".played-moves")!.outerHTML = playedMoves(s);
+        const next = supportingScene(s, support);
+        if (main.querySelector(".spotlight-layer")) switchSpotlight(main, false, next, "interruption");
+        else interruptPanel(main, next);
+      } else if (spotlight !== (renderedKind === "spotlight")) {
+        switchSpotlight(main, spotlight, supportingScene(s, support), motion ? "normal" : "cut");
+      } else if (spotlight) {
+        // Keep the animated layer in place as the hypothetical line advances.
+        main.querySelector(".spotlight-layer:not([data-departing])")!.innerHTML = spotlightContents(s);
+      } else if (support !== renderedSupport) {
+        const panel = main.querySelector<HTMLElement>(".comparison-panel:not([data-departing])")!;
+        panel.innerHTML = support;
+        if (motion) {
+          panel.getAnimations().forEach(animation => animation.cancel());
+          revealPanel(panel);
+        }
+      }
       main.dataset.instance = s.scene.instance;
+      main.dataset.scene = s.scene.kind;
     } else {
-      app.innerHTML = programme(s);
+      // A new game or correction replaces the scene immediately.
+      cutProgrammeMotion();
+      app.innerHTML = programme(s, support);
       resizeProgramme();
-    }
-    if (connected && !recovering && transition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      app.querySelector(".comparison-panel, .variation-rail")?.animate(
-        [{opacity: .65, transform: "translateY(8px)"}, {opacity: 1, transform: "none"}], {duration: 240});
+      const panel = app.querySelector<HTMLElement>(".comparison-panel");
+      if (motion && panel) revealPanel(panel);
     }
     renderedKind = s.scene.kind;
-    renderedRoot = s.game.rootKey;
+    renderedGame = s.game;
     renderedInstance = s.scene.instance;
+    renderedSupport = support;
   }
   for (const [color, ms] of [
     ["w", s.clocks.whiteMs],
@@ -314,6 +351,7 @@ async function sendCommand(command: Command): Promise<void> {
 }
 function connection(value: boolean): void {
   connected = value;
+  if (!value) cutProgrammeMotion();
   const banner = app.querySelector<HTMLElement>(".connection-banner");
   if (banner) banner.hidden = value;
   setText(
@@ -332,6 +370,7 @@ function accept(s: ProgrammeSnapshot): void {
 async function resnapshot(): Promise<void> {
   if (recovering) return;
   recovering = true;
+  cutProgrammeMotion();
   try {
     const response = await fetch("/api/programme", { cache: "no-store" });
     if (!response.ok) throw new Error("Snapshot unavailable");

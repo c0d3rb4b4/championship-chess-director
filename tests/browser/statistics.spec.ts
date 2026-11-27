@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { Director } from "../../src/server/director.js";
+import { demo } from "../../src/server/fixtures.js";
 import type { ProgrammeSnapshot } from "../../src/shared/types.js";
 import { programmeStream } from "./programme-stream.js";
 
@@ -24,7 +25,7 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
         if (panel === "outcomes") snapshot.engines[1].wdl = [0.1,99.9,0];
         if (panel === "time") snapshot.moveTimes[14].elapsedMs = 5800000;
         if (panel === "search") snapshot.engines[0].work = 1234567890123;
-        if (panel === "history") snapshot.history[0].sesse!.pawns = -12.85;
+        if (panel === "history") snapshot.history[demo.moves.length].sesse!.pawns = -12.85;
       }
       await page.goto("/programme");
       await expect(page.locator(".connection-banner")).toBeHidden();
@@ -43,6 +44,8 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
           for (const name of axes) {
             const plot = card.getByRole("img", { name, exact: true });
             await expect(plot).toBeVisible();
+            await expect(plot.locator('text[y="216"]').first()).toHaveText("0");
+            expect(await plot.locator('text[y="216"]').count()).toBeLessThanOrEqual(7);
             await expect(plot.locator("circle").first()).toBeVisible();
           }
         }
@@ -52,14 +55,14 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
   }
 });
 
-test("panel transitions preserve the board and clocks and yield immediately to the played move", async ({page}) => {
+test("every programme panel yields once to the played move", async ({page}) => {
   // Inject ordered observations into the same listener used by the live SSE connection.
   const send = await programmeStream(page);
   for (const motion of ["reduce","no-preference"] as const) {
     await page.emulateMedia({reducedMotion:motion});
-    for (const time of [20000,38000,58000,74000]) {
+    for (const time of [0,20000,38000,58000,74000]) {
       const director = new Director();
-      const initial = director.advanceTo(time-1);
+      const initial = director.advanceTo(Math.max(0, time-1));
       await page.route("**/api/programme",route => route.fulfill({json:initial}));
       await page.goto("/programme");
       const board = page.getByTestId("actual-board");
@@ -69,17 +72,36 @@ test("panel transitions preserve the board and clocks and yield immediately to t
       const bounds = await strip.boundingBox();
       const entering = director.advanceTo(time);
       await send(entering);
-      await expect(page.locator("[data-panel]")).toHaveAttribute("data-panel",entering.panel);
+      if (time) await expect(page.locator("[data-panel]")).toHaveAttribute("data-panel",entering.panel);
       expect(await originalBoard!.evaluate(el => el.isConnected)).toBe(true);
       const card = page.locator(".comparison-panel");
-      const entrance = await card.evaluateHandle(el => el.getAnimations()[0] ?? null);
+      const entrance = await card.evaluateHandle(el => el.getAnimations({ subtree: true })[0] ?? null);
       if (motion === "reduce") expect(await entrance.jsonValue()).toBeNull();
+      else if (time) expect(await entrance.evaluate(animation => animation?.effect?.getComputedTiming().duration)).toBeGreaterThan(240);
       await send(director.advanceTo(time+1));
       expect(await card.evaluate((el, original) =>
-        el.getAnimations().every(a => a === original), entrance)).toBe(true);
+        el.getAnimations({ subtree: true }).every(a => a === original), entrance)).toBe(true);
       await send(director.command("release-move"));
       await expect(page.getByTestId("programme")).toHaveAttribute("data-scene","actual-move");
-      await expect(page.locator("[data-panel]")).toHaveCount(0);
+      const outgoing = page.locator(".comparison-panel[data-departing]");
+      const incoming = page.locator(".comparison-panel:not([data-departing])");
+      if (motion === "no-preference") {
+        await expect(outgoing).toHaveCount(1);
+        await expect(outgoing).toHaveAttribute("aria-hidden", "true");
+        await expect(page.locator(".actual-board-wrap")).toHaveAttribute("data-move-highlight-pending", "");
+        await expect(incoming).toHaveCSS("opacity", "0");
+        await page.getByTestId("programme").evaluate(programme => {
+          programme.getAnimations({ subtree: true }).forEach(animation => animation.finish());
+        });
+        await expect(outgoing).toHaveCount(0);
+      } else await expect(outgoing).toHaveCount(0);
+      await expect(incoming.locator(".last-move strong")).toHaveText("10.d4");
+      const moveCard = await incoming.locator(".last-move").elementHandle();
+      // The pending card stays identical when the director leaves the move beat.
+      await send(director.advanceTo(demo.events[0].atMs + 6000));
+      await expect(page.getByTestId("programme")).toHaveAttribute("data-scene", "thinking");
+      expect(await moveCard!.evaluate(el => el.isConnected)).toBe(true);
+      expect(await incoming.evaluate(el => el.getAnimations().length)).toBe(0);
       expect(await strip.boundingBox()).toEqual(bounds);
       await page.unroute("**/api/programme");
     }

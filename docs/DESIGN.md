@@ -74,7 +74,7 @@ After a spotlight, require a 90 s cooldown and 45 s of large-board time. Before 
 
 Use a fixed 1920 × 1080 canvas, scaled uniformly. The baseline reserves a 768-square actual board, a right-hand analysis region, a fixed header and a lower strip for recent played notation. Keep orientation fixed unless explicitly changed. In a spotlight retain a 416-square actual board on the left. Keep both player clocks and the side-to-move indication in the header. Give the 768-square analysis board a move rail, source, root move and permanent **ANALYSIS LINE NOT PLAYED** label. Only the actual board has clocks.
 
-Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Reveal an incoming supporting panel over 240 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars. For a long line, remove trailing whole plies before reducing type size. Keep check, mate, capture, castling, disambiguation and promotion marks intact.
+Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Slide and fade an incoming supporting panel over 760 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars. For a long line, remove trailing whole plies before reducing type size. Keep check, mate, capture, castling, disambiguation and promotion marks intact.
 
 ### Score strip, board identity and motion
 
@@ -90,13 +90,17 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 
 | Change | First visible frame | Motion |
 |---|---|---|
-| Enter spotlight | Mini actual board, both real clocks and persistent analysis warning | Incoming variation rail rises 8 px over 240 ms with ease-out. |
-| Actual move during playback | Replace the PV tree with the accepted board, new clock state and pending engine state | Cut the board. Reveal the supporting move graphic independently. |
+| Enter spotlight | Full actual board in motion with both clocks anchored | The live board travels down and left and scales to 416 px as the labelled analysis board and rail slide in from the right edge. The boards share a 1.05 s timeline and ease to a stop with a gap between them throughout. |
+| End spotlight at the same position | Actual board grows back into the main layout | The boards reverse along the same 1.05 s path with the same easing and separation. The supporting panel slides in underneath. |
+| Actual move during playback | Publish the accepted position, clocks and played-move strip | Stop the PV and animate the two boards back from their current positions over 750 ms. Reveal the new move tint and supporting move graphic on landing. |
+| Actual move during another programme panel | Publish the accepted position on the anchored live board | Slide the outgoing panel off the right edge over 750 ms, then reveal the tint and move graphic. Keep the move card in place while engines are still pending. |
 | Next PV ply or clock tick | Advance the current frame or digits | Retain label positions. No scene entrance. |
 | Reconnect, refresh, reduced motion | Render the eligible snapshot | Direct cut. Never queue a missed animation. |
 | WDL and history updates | Publish the new eligible value or point | Smooth bar width only within a root. Clear obsolete values immediately on a root change. |
 
-The pilot client receives full SSE snapshots. Keep the director authoritative and attach entrance motion only to a change of scene kind, outside the clock update path. Replacing obsolete nodes cancels their animations. Scene motion must never retain an old board overlay. For future panel rotation, key the transitioning region by scene instance, position root and content identity; do not rebuild the whole canvas for each statistic.
+The pilot client receives full SSE snapshots. The director owns scene timing and the sequence of hypothetical plies. The browser starts motion on a change of scene instance and preserves animated elements through clock and evaluation updates. The departing analysis freezes as artwork during a return or a consecutive played move. Corrections, discontinuous snapshots, disconnects and resnapshots clear the artwork and cancel the prior motion.
+
+Evaluation history and cumulative move time begin at move 0 and extend through the latest played position. Cumulative time starts at zero for both players. The evaluation chart plots the recorded starting-position sample when available. Missing samples remain gaps. Axis labels thin as history grows while the plot retains each recorded point.
 
 See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
 
@@ -116,7 +120,7 @@ The default uses the silver and graphite board in the [visual reference](referen
 
 **Piece renderer.** The renderer maps the existing `BoardFrame.pieces` entries (side, type and square) to original paths in [pieces.ts](../src/client/pieces.ts) with a shared 100 × 100 square, optical baseline and side bearings. The paths were drawn for this repository using the opening screenshot as a visual reference. White and Black use the same silhouette landmarks, with colour-specific outlines and internal details. Reuse the set on both boards and in the operator preview. Font availability must have no effect on the set’s appearance. Keep the accessible board label, FEN and last-move highlights independent of artwork. The [Phase 0 piece table](PHASED_PLAN.md#0-metal-board-and-matching-chess-pieces) describes the six silhouettes and the required 24-sample comparison.
 
-**A36 review evidence.** Capture a populated position that includes all six piece types and a sparse position with visible source and destination squares. Include the 768 px actual board, the 416 px actual board and the 768 px analysis board across captures at 1920 × 1080 and 1280 × 720. During playback, the actual board retains its last played move while the analysis board highlights each hypothetical ply. On interruption both the actual pieces and their highlights must show the newly played move on the first eligible frame. Inspect a scaled capture for coordinate and piece legibility. At the OBS rehearsal, inspect a short 30 fps recording for grain shimmer or blocking on static squares; reduce texture contrast or simplify the small board if either appears. Browser screenshots provide the review evidence for Phase 0 and the encoded recording belongs to the broadcast sign-off phase.
+**A36 review evidence.** Capture a populated position that includes all six piece types and a sparse position with visible source and destination squares. Include the 768 px actual board, the 416 px actual board and the 768 px analysis board across captures at 1920 × 1080 and 1280 × 720. During playback, the actual board retains its last played move while the analysis board highlights each hypothetical ply. On a played-move interruption, the actual pieces show the new position on the first eligible frame. The tint follows the animated return and appears immediately on a direct cut. Inspect a scaled capture for coordinate and piece legibility. At the OBS rehearsal, inspect a short 30 fps recording for grain shimmer or blocking on static squares; reduce texture contrast or simplify the small board if either appears. Browser screenshots provide the review evidence for Phase 0 and the encoded recording belongs to the broadcast sign-off phase.
 
 ## Derived panels
 

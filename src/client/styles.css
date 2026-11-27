@@ -139,10 +139,13 @@ p {
 .player-piece.black-dot { background: #181818; }
 .player strong { font-family: var(--display); font-size: 42px; letter-spacing: -.04em; flex-shrink: 0; }
 .player.running strong { color: var(--red); text-decoration: underline; text-underline-offset: 4px; }
-.large-actual, .mini-actual, .analysis-region, .variation-rail, .comparison-panel { position: absolute; top: 128px; }
-.large-actual { left: 48px; width: 832px; height: 824px; padding: 0 32px; }
+.actual-game, .analysis-region, .variation-rail, .comparison-panel { position: absolute; top: 128px; }
+.actual-game { z-index: 2; padding: 0 32px; }
+.large-actual { left: 48px; width: 832px; height: 824px; }
 .board-slug, .analysis-region h2 { display: inline-flex; height: 40px; align-items: center; }
 .actual-board-wrap, .analysis-board { width: 768px; height: 768px; margin-top: 16px; }
+.actual-board-wrap, .comparison-panel { transform-origin: left top; }
+.actual-board-wrap[data-move-highlight-pending] [data-last-move-square] { opacity: 0; }
 .chessboard { display: block; width: 100%; height: 100%; }
 .mini-board .plate-sheen, .mini-board .plate-grain { opacity: .35; }
 .mini-board .plate-fasteners { display: none; }
@@ -190,9 +193,10 @@ p {
 .analysis-status { padding: 26px 34px; }
 .analysis-status span { color: var(--quiet); }
 .analysis-status h2 { margin-top: 8px; font-size: 32px; }
-.mini-actual { left: 48px; width: 520px; padding: 0 32px; }
-.mini-board { width: 416px; height: 416px; margin-top: 16px; }
+.mini-actual { top: 296px; left: 24px; width: 480px; }
+.mini-board { width: 416px; height: 416px; }
 .mini-position { margin-top: 12px; font-size: 32px; font-weight: 700; }
+.spotlight-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .analysis-region { left: 600px; width: 768px; }
 .analysis-region h2 { font: 800 26px var(--display); color: var(--ink); background: var(--paper); padding: 0 16px; }
 .variation-rail { left: 1400px; top: 184px; width: 472px; background: #1c1c1b; }
@@ -207,13 +211,7 @@ p {
 .played-moves li { display: flex; align-items: baseline; gap: 14px; padding: 0 24px; border-left: 1px solid var(--rule); font-size: 30px; }
 .played-moves li span { color: var(--quiet); font-size: 22px; }
 .connection-banner { position: absolute; inset: auto 48px 40px; height: 64px; display: grid; place-content: center; background: var(--red); color: white; font-size: 26px; font-weight: 700; }
-@media (prefers-reduced-motion: no-preference) {
-  .scene-enter :is(.variation-rail, .comparison-panel) { animation: panel-reveal 240ms cubic-bezier(.2,.7,.25,1) both; }
-}
-@keyframes panel-reveal {
-  from { opacity: .65; translate: 0 8px; }
-  to { opacity: 1; translate: 0 0; }
-}
+.programme-header, .played-moves, .connection-banner { z-index: 3; }
 /* The operator is a separate, responsive control surface. */
 .operator-page {
   background: #121212;
