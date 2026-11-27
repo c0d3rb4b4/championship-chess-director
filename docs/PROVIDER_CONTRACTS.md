@@ -1,6 +1,6 @@
 # Phase 3 provider replay
 
-M0 is open for in-play updates and field verification. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
+M0 is open for in-play updates and field verification. Use the [deployment recorder](#record-a-deployed-round) to collect those observations. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
 
 At the initial offline checkpoint on 26 November 2026 the deployment endpoints could not be reached for a packet capture from the development host. No event PGN endpoint or verified event-to-provider game mapping was configured. The checked-in example is original synthetic data. At that checkpoint the production event, round, deployed revisions, capture dates and redistribution permissions were unverified.
 
@@ -28,6 +28,49 @@ The example reconstructs 1.e4, a Sesse principal line of 1…e5 with a +0.25 Whi
 3. Wrap the chronological observations using the example envelope. For Sesse, base is the request's version and version is the response's X-RGLM. Record disconnect events for all three sources. An authority disconnect carries the same authority and gameId as the PGN packet, with event set to disconnect and no body. During that gap the replay skips engine packets. Recovery requires a bound authority PGN, a full Sesse snapshot and a fresh Leela connection generation with a matching position. Across an ordinary move, keep the Sesse delta chain intact and supply a new Leela subscription plus matching position. Sesse may lead or lag the authority. Its version advances in either case and analysis emits only when both the FEN and complete history match. On a missing delta base, the CLI reports the receipt timestamp on stderr and waits for a full snapshot. Retain original transport logs alongside the replay for timing and authority availability review.
 4. Replay twice and compare the emitted observations with the captured game, both advertised analyses and the original transport log. Verify result and clock convention, Sesse score and depth per line, Leela WDL source and denominator, and delayed frames across reconnects. Record unsupported fields individually. M0 closes after successful observed replay. OBS and viewer gates belong to Phase 6.
 
+## Record a deployed round
+
+Run the recorder from a host with access to the three feeds. It polls a single Lichess round PGN every 15 seconds, follows the Sesse long-poll version chain and subscribes to the Leela socket. Lichess and Leela must advertise the same chapter and player IDs in the configured colours. A game switch requires a new recording and binding. Each authority root change starts a fresh Leela subscription. An authority gap also resets Sesse to a full read. The timestamps describe local receipt, so use the feed and broadcast clock as independent references when checking in-play timing.
+
+For Game 4 the [Lichess round](https://lichess.org/broadcast/fide-world-chess-championship-2026/game-4/wIwJtPqz) uses round ID `wIwJtPqz` and chapter `IriXvwPw`. Save the following example as `data/game-4-capture-config.json`. Set `binding.event` to the current PGN `Event` header before recording. The scheduled placeholder and the live PGN may use different event strings. The Sesse names below come from the same players' Game 3 feed. Check the aliases against Game 4 when Sesse switches over.
+
+```json
+{
+  "roundId": "wIwJtPqz",
+  "binding": {
+    "authority": "lichess",
+    "gameId": "IriXvwPw",
+    "event": "Salesforce FIDE World Championship 2026",
+    "round": "4.1",
+    "whiteId": "46616543",
+    "blackId": "14205483",
+    "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "sessePlayers": { "white": "Gukesh D", "black": "Sindarov" },
+    "clockConvention": "unknown"
+  }
+}
+```
+
+```sh
+npm ci
+mkdir -p data
+curl -fsS 'https://lichess.org/api/broadcast/round/wIwJtPqz.pgn?clocks=true&comments=false' | sed -n '1,/^$/p'
+node --import tsx scripts/capture-providers.ts data/game-4-capture-config.json data/game-4-capture.json 2700
+node --import tsx scripts/replay-providers.mjs data/game-4-capture.json > data/game-4-replay.jsonl
+node --import tsx scripts/replay-providers.mjs data/game-4-capture.json > data/game-4-replay-repeat.jsonl
+cmp data/game-4-replay.jsonl data/game-4-replay-repeat.jsonl
+```
+
+The duration is in seconds. Ctrl-C finalises the recording early. The recorder creates a new file with owner-only permissions. Keep provider payloads under the ignored `data/` directory until redistribution terms are verified. The file preserves the PGN clock comments, Sesse versions and Leela subscription generations. Provider failures appear on stderr. A Sesse read the decoder rejects is followed by a fresh snapshot request.
+
+For M0 evidence, use the normalised replay to find both engines on the same in-play root before and after a move. Confirm substantive search updates as well as idle traffic. Verify the PGN clock convention against the feed during the move. Collect recovery from each source and label any producer-induced close. Independently verify Leela calibration and candidate visit aggregation before enabling them. A byte-identical replay confirms determinism, and the coverage checks establish whether it contains the necessary live events.
+
+### Recorder verification · 27 November 2026 UTC
+
+A 70-second capture from 01:08 UTC collected 14 packets from the completed Game 3, including two empty versioned Sesse deltas and Leela status heartbeats. Two replays emitted the same 12 JSONL observations. The final 120-ply root matched all three sources, with a ½–½ result, Stockfish's Bg5 at depth 130 and nine Leela candidates in evaluation 2804473. The recording remains private. SHA-256 of the capture is `74ae93ad9ed7888f718e246155ae6a7f00bf0fa1be7f0e407da07d2a95963b1e`.
+
+The offline recorder test exercises a move, an intact Sesse delta chain, a fresh Leela subscription at the new ply and recovery from an authority gap with a fresh Sesse snapshot. The browser simulation renders the pending and recovered states at 1920 × 1080 and 1280 × 720. A two-viewer fixture interruption took 204 ms from operator click to browser paint against the 500 ms target. Deployed in-play behaviour, encoded OBS output and viewer comprehension still require sign-off.
+
 ## Observed deployment replay · 27 November 2026 UTC
 
 The selected game was Game 3 of the FIDE World Chess Championship in Geneva. The Lichess round ID was `fnmEB1kH`, chapter `RD8sbYw1`, PGN round `3.1`. White was Javokhir Sindarov (FIDE 14205483), Black was Gukesh D (46616543). The authority reported a draw after 60…Kf3 from the standard start. The replay matched all 120 plies and the final FEN. The provider PGN's Date header differs from the capture date.
@@ -54,4 +97,6 @@ Run `npm ci`, `npx playwright install --with-deps --no-shell chromium`, then `np
 
 The seven numbered stages cover the bound position after 1.e4, independent search updates, both engines pending after 1…e5, Sesse returning first on a delta, both engines returning, the authority reconnecting and analysis recovering. The test checks that an intervening old-root Sesse delta advances the wire version without emitting analysis. It also checks stale Leela frames, SAN, clocks, per-source candidates and absence of unverified WDL. Node replay tests additionally cover a future-root Sesse update before the authority and a lost base during recovery.
 
-**Provider simulation screenshots** runs on PRs targeting main, after merges to main, and on manual dispatch. Download the commit-labelled artifact from a successful workflow run. It contains fourteen PNGs at 1920 × 1080 and 1280 × 720 plus the stage snapshots in `stages.json`. Artifacts are retained for 30 days. Local output is in `test-results/provider-screenshots/`. The deployed in-play checks above remain open.
+**Provider simulation screenshots** runs on PRs targeting main, after merges to main, and on manual dispatch. Download the commit-labelled artifact from a successful workflow run. It contains fourteen provider-replay PNGs plus the stage snapshots in `stages.json`. The `statistics/` folder holds 24 [ordinary programme panel captures](evidence/phase-2/README.md) from the synthetic director fixture. Completed move time, evaluation history, Leela outcomes and search progress each have typical, missing-data and long-value views. Both sets cover 1920 × 1080 and 1280 × 720. Artifacts are retained for 30 days. Local output is in `test-results/provider-screenshots/`. The deployed in-play checks above remain open.
+
+The `videos/` folder contains four silent 1280 × 720 MP4 clips from the demo director. They cover statistics rotation, the entrance into evaluation history, the analysis spotlight and its first hypothetical move, and the actual move that interrupts the spotlight before both engines return. The rehearsal jumps between fixture times and plays the programme's entrance animations at their normal speed. The local screenshot command saves the same recordings as WebM. OBS sign-off remains a separate production check.

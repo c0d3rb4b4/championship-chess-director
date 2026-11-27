@@ -20,9 +20,21 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps --no-shell chromium
       - run: npm run screenshots:providers
+      - name: Encode 720p review clips as MP4
+        run: |
+          if ! command -v ffmpeg > /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          for clip in test-results/provider-screenshots/videos/*.webm; do
+            ffmpeg -hide_banner -loglevel error -y -i "$clip" -an -c:v libx264 \
+              -preset fast -crf 20 -pix_fmt yuv420p -movflags +faststart "${clip%.webm}.mp4"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: provider-screenshots-${{ github.sha }}
-          path: test-results/provider-screenshots/
+          path: |
+            test-results/provider-screenshots/
+            !test-results/provider-screenshots/videos/*.webm
           if-no-files-found: error
           retention-days: 30

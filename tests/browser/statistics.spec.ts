@@ -2,10 +2,12 @@ import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { Director } from "../../src/server/director.js";
 import type { ProgrammeSnapshot } from "../../src/shared/types.js";
+import { programmeStream } from "./programme-stream.js";
 
-test("ordinary panels fit both broadcast sizes with typical, missing and extended values", async ({page}) => {
+test("ordinary panels fit both broadcast sizes with typical, missing and extended values", { tag: "@review-captures" }, async ({page}) => {
   test.setTimeout(90000);
-  await mkdir("docs/evidence/phase-2", { recursive: true });
+  const dir = "test-results/provider-screenshots/statistics";
+  await mkdir(dir, { recursive: true });
   let snapshot: ProgrammeSnapshot;
   await page.route("**/api/programme", route => route.fulfill({json:snapshot}));
   for (const [panel, atMs] of [["outcomes",20000],["time",38000],["search",58000],["history",156000]] as const) {
@@ -36,8 +38,15 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
           const card = page.locator(`[data-panel="${panel}"]`);
           await expect(card).toBeVisible();
           expect(await card.evaluate(el => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth)).toBe(true);
+          const axes = panel === "time" ? ["Minutes on completed moves"] :
+            panel === "history" ? ["Pawns", "Leela · Probability (%)"] : [];
+          for (const name of axes) {
+            const plot = card.getByRole("img", { name, exact: true });
+            await expect(plot).toBeVisible();
+            await expect(plot.locator("circle").first()).toBeVisible();
+          }
         }
-        await page.screenshot({path:`docs/evidence/phase-2/${panel}-${variant}-${height}.jpg`, quality:80});
+        await page.screenshot({path:`${dir}/${panel}-${variant}-${height}.jpg`, quality:80});
       }
     }
   }
@@ -45,17 +54,7 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
 
 test("panel transitions preserve the board and clocks and yield immediately to the played move", async ({page}) => {
   // Inject ordered observations into the same listener used by the live SSE connection.
-  await page.addInitScript(() => {
-    class RehearsalStream extends EventTarget {
-      constructor() {
-        super();
-        window.addEventListener("rehearsal", event => this.dispatchEvent(
-          new MessageEvent("snapshot",{data:(event as CustomEvent).detail})));
-      }
-      close() {}
-    }
-    Object.defineProperty(window,"EventSource",{value:RehearsalStream});
-  });
+  const send = await programmeStream(page);
   for (const motion of ["reduce","no-preference"] as const) {
     await page.emulateMedia({reducedMotion:motion});
     for (const time of [20000,38000,58000,74000]) {
@@ -68,8 +67,6 @@ test("panel transitions preserve the board and clocks and yield immediately to t
       const originalBoard = await board.elementHandle();
       const strip = page.locator(".players");
       const bounds = await strip.boundingBox();
-      const send = (s: ProgrammeSnapshot) => page.evaluate(json =>
-        window.dispatchEvent(new CustomEvent("rehearsal",{detail:json})),JSON.stringify(s));
       const entering = director.advanceTo(time);
       await send(entering);
       await expect(page.locator("[data-panel]")).toHaveAttribute("data-panel",entering.panel);

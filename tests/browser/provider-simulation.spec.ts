@@ -6,6 +6,7 @@ import type { Game } from "../../src/server/providers/game.js";
 import type { LeelaReplay } from "../../src/server/providers/leela.js";
 import type { SesseReplay } from "../../src/server/providers/sesse.js";
 import type { EngineView, ProgrammeSnapshot } from "../../src/shared/types.js";
+import { programmeStream } from "./programme-stream.js";
 
 type Row = { receivedMs: number } & (
   | { source: "authority"; observation: Game }
@@ -68,7 +69,7 @@ function simulate() {
   return states;
 }
 
-test("capture in-play provider replay at both broadcast sizes", async ({ page }) => {
+test("capture in-play provider replay at both broadcast sizes", { tag: "@review-captures" }, async ({ page }) => {
   const stages = [
     [4, "01-bound", "e5", "c5"], [6, "02-search-update", "e5", "c5"],
     [7, "03-move-pending", "", ""], [9, "04-sesse-return", "Nf3", ""],
@@ -80,17 +81,7 @@ test("capture in-play provider replay at both broadcast sizes", async ({ page })
   await mkdir(dir, { recursive: true });
   let current = states.get(4)!;
   await page.route("**/api/programme", route => route.fulfill({ json: current }));
-  await page.addInitScript(() => {
-    class SimulationStream extends EventTarget {
-      constructor() {
-        super();
-        window.addEventListener("simulation", e =>
-          this.dispatchEvent(new MessageEvent("snapshot", { data: (e as CustomEvent).detail })));
-      }
-      close() {}
-    }
-    Object.defineProperty(window, "EventSource", { value: SimulationStream });
-  });
+  const send = await programmeStream(page);
   await page.goto("/programme");
   const board = page.getByTestId("actual-board");
   await expect(board).toBeVisible();
@@ -98,8 +89,7 @@ test("capture in-play provider replay at both broadcast sizes", async ({ page })
   for (const [time, name, stockfish, leela] of stages) {
     current = states.get(time)!;
     current.sequence = ++sequence;
-    await page.evaluate(data => window.dispatchEvent(new CustomEvent("simulation", { detail: data })),
-      JSON.stringify(current));
+    await send(current);
     await expect(board).toHaveAttribute("data-fen", current.actual.fen);
     await expect(page.locator(".connection-banner")).toBeHidden();
     await expect(page.locator(".played-moves b")).toHaveText(time < 7 ? ["e4"] : ["e4", "e5"]);
