@@ -1,3 +1,5 @@
+import { LeelaFieldAudit } from "./leela-field-audit.mjs";
+
 // Collect timing evidence from accepted replay packets without copying provider payloads.
 export class ProviderCoverage {
   current;
@@ -6,9 +8,10 @@ export class ProviderCoverage {
   evidence = {
     authority: { snapshotAt: null, idleAt: null, recovered: null },
     sesse: { snapshotAt: null, idleAt: null, workAt: null, recovered: null },
-    leela: { snapshotAt: null, idleAt: null, workAt: null, recovered: null },
+    leela: { snapshotAt: null, idleAt: null, workAt: null, recovered: null, fieldSamples: [] },
     sharedMove: null,
     clockedSharedMove: null,
+    observedClockedSharedMove: null,
   };
 
   disconnect({ source, receivedMs, initiatedBy }) {
@@ -27,6 +30,7 @@ export class ProviderCoverage {
     } else {
       this.current.leelaAt = null;
       this.current.leelaNodes.clear();
+      this.current.leelaFieldAudit = undefined;
     }
   }
 
@@ -36,15 +40,19 @@ export class ProviderCoverage {
     const sameHistory = current && sameMoves(current.game.moves, game.moves);
     const extendsByOne = current && game.moves.length === current.game.moves.length + 1 &&
       sameMoves(current.game.moves, game.moves.slice(0, -1));
+    const annotation = game.clockAnnotation;
 
     if (sameHistory && game.result === current.game.result) {
       if (at > current.at) this.evidence.authority.idleAt ??= at;
       current.game = game;
       current.clock ??= clockEvidence(game, at);
+      if (annotation?.pgnClock !== current.clockAnnotation?.pgnClock)
+        current.clockAnnotation = annotation && { ...annotation, receivedMs: at };
     } else {
       this.previous = extendsByOne && !current.game.result && !game.result ? current : undefined;
       this.current = {
-        game, at, clock: clockEvidence(game, at), sesseAt: null, leelaAt: null,
+        game, at, clock: clockEvidence(game, at), clockAnnotation: annotation && { ...annotation, receivedMs: at },
+        sesseAt: null, leelaAt: null,
         sesseNodes: undefined, leelaNodes: new Map(),
       };
     }
@@ -75,6 +83,9 @@ export class ProviderCoverage {
       this.clearEngine("leela");
       return;
     }
+    this.current.leelaFieldAudit ??= new LeelaFieldAudit();
+    const fields = this.current.leelaFieldAudit.observe(packet, observation, this.current.game.moves.length);
+    if (fields) this.evidence.leela.fieldSamples.push(fields);
     if (!observation.candidates.length) return;
     this.evidence.leela.snapshotAt ??= at;
     this.recover("leela", at);
@@ -109,6 +120,10 @@ export class ProviderCoverage {
     if (before.clock && after.clock) this.evidence.clockedSharedMove ??= {
       before: { ...move.before, clock: before.clock },
       after: { ...move.after, clock: after.clock },
+    };
+    if (before.clockAnnotation && after.clockAnnotation) this.evidence.observedClockedSharedMove ??= {
+      before: { ...move.before, annotation: before.clockAnnotation },
+      after: { ...move.after, annotation: after.clockAnnotation },
     };
   }
 
