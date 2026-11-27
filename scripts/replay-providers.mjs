@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { decodeGame } from "../src/server/providers/game.ts";
 import { LeelaReplay } from "../src/server/providers/leela.ts";
-import { SesseReplay } from "../src/server/providers/sesse.ts";
+import { SesseFullSnapshotRequired, SesseReplay } from "../src/server/providers/sesse.ts";
 
 const recording = JSON.parse(readFileSync(process.argv[2], "utf8"));
 const leela = new LeelaReplay();
@@ -31,7 +31,8 @@ for (const packet of recording.packets) {
       if (!game || JSON.stringify(next.moves) !== JSON.stringify(game.moves)) {
         leela.disconnect();
         connection = subscription = undefined;
-        sesse = new SesseReplay(next);
+        if (sesse) sesse.setGame(next);
+        else sesse = new SesseReplay(next);
       }
       authorityDisconnected = false;
       game = observation = next;
@@ -42,7 +43,12 @@ for (const packet of recording.packets) {
       if (packet.event === "disconnect") sesse.disconnect();
       else {
         if (typeof packet.version !== "string" || !packet.version) throw Error("Missing X-RGLM");
-        observation = sesse.receive(packet.version, packet.base, body, receivedMs);
+        try {
+          observation = sesse.receive(packet.version, packet.base, body, receivedMs);
+        } catch (error) {
+          if (!(error instanceof SesseFullSnapshotRequired)) throw error;
+          console.error(`Sesse packet at ${receivedMs}: full snapshot required`);
+        }
       }
       break;
     case "leela":

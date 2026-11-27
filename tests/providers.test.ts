@@ -25,13 +25,13 @@ test("authority binding includes event, round, identities, start and source", ()
 
 test("Sesse full, incremental update, heartbeat, loss of base and full recovery", () => {
   const source = new SesseReplay(game);
-  const initial = source.receive("1", undefined, full, 100);
+  const initial = source.receive("1", undefined, full, 100)!;
   assert.equal(initial.principal.score?.value, 0.25);
   assert.deepEqual(initial.alternatives[0], { pv: ["c5"], depth: 19,
     score: { unit: "mate", value: -3, bound: "<=" } });
   assert.equal(game.result, undefined);
   const delta = [[["nodes"], 555], [["pv", 1], "Nf3"]];
-  const revised = source.receive("2", "1", delta, 105);
+  const revised = source.receive("2", "1", delta, 105)!;
   assert.deepEqual(revised.principal.pv, ["e5", "Nf3"]);
   assert.deepEqual(source.receive("2", "1", delta, 110), revised);
   source.receive("3", "2", [[["heartbeat"], 120]], 120);
@@ -45,7 +45,7 @@ test("Sesse full, incremental update, heartbeat, loss of base and full recovery"
   source.disconnect();
   assert.throws(() => source.receive("11", "10", [], 190));
   assert.deepEqual(source.receive("12", undefined, full, 200), initial);
-  assert.throws(() => source.receive("13", undefined, { ...full, position: { ...full.position, history: [] } }, 210));
+  assert.equal(source.receive("13", undefined, { ...full, position: { ...full.position, history: [] } }, 210), undefined);
 });
 
 test("Leela partial frames preserve candidates and reject stale subscriptions or mismatched roots", () => {
@@ -74,10 +74,26 @@ test("Sesse accepts explicitly bound display names and decimal-string search cou
   const wire = { ...full, position: { ...full.position, player_w: "A." }, depth: "30", nodes: "320",
     refutation_lines: { c5: { ...full.refutation_lines.c5, depth: "19" } } };
   const source = new SesseReplay(bound);
-  const result = source.receive("1", undefined, wire, 0);
+  const result = source.receive("1", undefined, wire, 0)!;
   assert.equal(result.nodes, 320);
   assert.equal(result.principal.depth, 30);
   assert.equal(result.alternatives[0].depth, 19);
   assert.throws(() => new SesseReplay(game).receive("1", undefined, wire, 0));
-  assert.equal(source.receive("2", undefined, { ...wire, nodes: "9e3" }, 1).nodes, undefined);
+  assert.equal(source.receive("2", undefined, { ...wire, nodes: "9e3" }, 1)?.nodes, undefined);
+});
+
+test("Sesse can advance before the authority without emitting future analysis", () => {
+  const source = new SesseReplay(game);
+  const advanced = decodeGame(binding, "event-pgn", "r1", pgn.replace(/\*$/, "e5 *"));
+  source.receive("1", undefined, full, 100);
+  const next = { ...full, position: { ...full.position, fen: advanced.fen, history: advanced.moves },
+    pv: ["Nf3"], refutation_lines: {} };
+  assert.equal(source.receive("2", "1", [[[], next]], 110), undefined);
+  assert.equal(source.lastWorkMs, 100);
+  source.setGame(advanced);
+  assert.equal(source.lastWorkMs, undefined);
+  const matching = source.receive("3", "2", [[["nodes"], 420]], 120);
+  assert.deepEqual(matching?.principal.pv, ["Nf3"]);
+  assert.equal(matching?.nodes, 420);
+  assert.equal(source.lastWorkMs, 120);
 });
