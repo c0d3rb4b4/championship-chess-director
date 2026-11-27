@@ -21,7 +21,7 @@ async function sampleMotion(page: Page, fractions?: number[], holdAt?: number) {
     const movements = animations.filter(animation => {
       const effect = animation.effect;
       return effect instanceof KeyframeEffect &&
-        effect.target?.matches(".actual-game, .actual-board-wrap, .spotlight-layer");
+        effect.target?.matches(".actual-game, .spotlight-layer");
     });
     await Promise.all(movements.map(animation => animation.ready));
     const timings = movements.map(animation => {
@@ -49,6 +49,11 @@ async function sampleMotion(page: Page, fractions?: number[], holdAt?: number) {
     function readPose() {
       const board = programme.querySelector('[data-testid="actual-board"]')!;
       const actual = board.getBoundingClientRect();
+      const black = programme.querySelector('.player[data-side="b"]')!.getBoundingClientRect();
+      const white = programme.querySelector('.player[data-side="w"]')!.getBoundingClientRect();
+      const playersAligned = [black, white].every(row =>
+        Math.abs(row.left - actual.left) < .02 && Math.abs(row.right - actual.right) < .02) &&
+        black.bottom < actual.top && white.top > actual.bottom;
       const analysis = programme.querySelector(".analysis-region .analysis-board")?.getBoundingClientRect();
       const tint = [...board.querySelectorAll("[data-last-move-square]")]
         .filter(isPainted)
@@ -60,7 +65,7 @@ async function sampleMotion(page: Page, fractions?: number[], holdAt?: number) {
         analysisX: analysis?.left,
         gap: analysis && analysis.left - actual.right,
         screenRight: programme.getBoundingClientRect().right,
-        tint,
+        tint, playersAligned,
         showMove: movePanel !== null && isPainted(movePanel),
       };
     }
@@ -75,7 +80,7 @@ async function sampleMotion(page: Page, fractions?: number[], holdAt?: number) {
 }
 
 function expectSynchronized(timings: Awaited<ReturnType<typeof sampleMotion>>["timings"]) {
-  expect(timings).toHaveLength(3);
+  expect(timings).toHaveLength(2);
   const [timing] = timings;
   expect(typeof timing.startTime).toBe("number");
   expect(timing.delay).toBe(0);
@@ -86,6 +91,7 @@ function expectSynchronized(timings: Awaited<ReturnType<typeof sampleMotion>>["t
 
 function expectSeparated(poses: Awaited<ReturnType<typeof sampleMotion>>["poses"]) {
   expect(Math.min(...poses.map(({ gap }) => gap ?? -Infinity))).toBeGreaterThan(1);
+  expect(poses.every(pose => pose.playersAligned)).toBe(true);
 }
 
 function expectSmoothStop(path: number[]) {
@@ -113,7 +119,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 108
     const send = await openProgramme(page, initial);
     const actual = page.getByTestId("actual-board");
     const originalBoard = await actual.elementHandle();
-    const clockStrip = page.locator(".programme-header .players");
+    const clockStrip = page.locator(".actual-game .players");
     const clocks = await clockStrip.boundingBox();
     const played = page.locator(".played-moves");
     const initialMoves = await played.textContent();

@@ -47,11 +47,14 @@ function timePanel(s: ProgrammeSnapshot): string {
     <div class="time-totals">${series.map((line,i) => `<div><span>${line.name} · recorded</span><strong>${number(totals[i]/60000)} min</strong></div>`).join("")}</div>
     ${chart(labels,series,"Minutes on completed moves")}<p class="axis-label">Move number</p>`;
 }
-export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,number,number]) => string): string {
+export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,number,number], candidate?: string) => string): string {
   let body = "";
   if (s.panel === "outcomes") {
     const engine = s.engines.find(e => e.id === "leela");
-    if (engine?.wdl) body = `<h2>Leela outcomes</h2><p class="stat-sub">${engine.conditionalSan ? "After " + e(engine.conditionalSan) : e(s.actual.moveLabel) + " · Current position"}</p>${outcome(engine.wdl)}`;
+    if (engine?.wdl) {
+      const position = engine.conditionalSan ? "" : `<p class="stat-sub">${e(s.actual.moveLabel)} · Current position</p>`;
+      body = `<h2>Leela outcomes</h2>${position}${outcome(engine.wdl, engine.conditionalSan)}`;
+    }
   } else if (s.panel === "time") body = timePanel(s);
   else if (s.panel === "search") {
     body = `<h2>Search progress</h2>${s.engines.map(engine =>

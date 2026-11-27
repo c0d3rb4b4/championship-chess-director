@@ -194,9 +194,17 @@ export function createBroadcastServer(options: {
         "/app.js": ["app.js", "text/javascript; charset=utf-8"],
         "/styles.css": ["styles.css", "text/css; charset=utf-8"],
       };
-      const asset = assets[path];
+      const flag = path.match(/^\/flags\/([a-z]{2})\.svg$/);
+      const asset = flag ? [`flags/${flag[1]}.svg`, "image/svg+xml"] : assets[path];
       if (req.method === "GET" && asset) {
-        const content = await readFile(resolve(options.publicDir, asset[0]));
+        const content = await readFile(resolve(options.publicDir, asset[0])).catch(error => {
+          if (flag && error.code === "ENOENT") return;
+          throw error;
+        });
+        if (!content) {
+          json(res, 404, { error: "Not found" });
+          return;
+        }
         res.writeHead(200, {
           "Content-Type": asset[1],
           "Cache-Control": "no-cache",

@@ -28,6 +28,7 @@ export interface EngineView {
   status: "Provisional" | "Ready" | "Updating for this position";
   score: string;
   scoreLabel: string;
+  pawns?: number;
   depth?: number;
   work?: number;
   workUnit?: "nodes" | "visits";
@@ -60,6 +61,8 @@ export interface ProgrammeSnapshot {
     round: string;
     white: string;
     black: string;
+    whiteCountry?: string;
+    blackCountry?: string;
     opening: string;
     ply: number;
     turn: "w" | "b";

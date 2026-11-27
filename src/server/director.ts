@@ -105,6 +105,7 @@ export class Director {
       }
       if ("score" in position) {
         const value = position.score.value;
+        view.pawns = value;
         view.score = `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
       } else {
         view.wdl = outcomes(position.wdl, ply % 2 === 1);
@@ -219,6 +220,8 @@ export class Director {
         round: demo.round,
         white: demo.white,
         black: demo.black,
+        whiteCountry: demo.whiteCountry,
+        blackCountry: demo.blackCountry,
         opening: demo.opening,
         ply: moves.length,
         turn: actualGame.turn(),

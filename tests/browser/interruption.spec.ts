@@ -229,14 +229,14 @@ test("an interrupted connection retains the last board, freezes clocks and shows
   });
 });
 
-test("reduced-motion spotlight cuts keep the real clock strip anchored", async ({ page, context }) => {
+test("reduced-motion spotlight cuts keep clocks with the actual board", async ({ page, context }) => {
   await page.goto("/operator");
   await page.getByRole("button", { name: "Restart demo" }).click();
   await expect(page.getByRole("status")).toContainText("Demo restarted");
   const viewer = await context.newPage();
   await viewer.emulateMedia({ reducedMotion: "reduce" });
   await viewer.goto("/programme");
-  const strip = viewer.locator(".programme-header .players");
+  const strip = viewer.locator(".actual-game .players");
   await expect(strip).toBeVisible();
   const bounds = await strip.boundingBox();
   const played = viewer.locator(".played-moves");
@@ -250,7 +250,11 @@ test("reduced-motion spotlight cuts keep the real clock strip anchored", async (
   await expect(viewer.getByTestId("analysis-board")).toBeInViewport({ ratio: .999 });
   expect(await viewer.getByTestId("programme").evaluate(programme =>
     programme.getAnimations({ subtree: true }).length)).toBe(0);
-  expect(await strip.boundingBox()).toEqual(bounds);
+  const compactBoard = (await viewer.getByTestId("actual-board").boundingBox())!;
+  const compactRows = (await strip.boundingBox())!;
+  expect(compactRows.x).toBeCloseTo(compactBoard.x, 1);
+  expect(compactRows.width).toBeCloseTo(compactBoard.width, 1);
+  expect(compactRows.width).toBeLessThan(bounds!.width);
   await page.getByRole("button", { name: "Return to actual" }).click();
   await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);
   await expect(played).toHaveText(initialMoves!);
