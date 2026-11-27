@@ -18,7 +18,7 @@ export interface BoardFrame {
   to?: string;
 }
 export interface Candidate {
-  depth: number;
+  depth?: number;
   moves: string[];
 }
 export interface EngineView {
