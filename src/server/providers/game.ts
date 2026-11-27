@@ -9,6 +9,7 @@ export interface Binding {
   whiteId: string;
   blackId: string;
   startFen: string;
+  sessePlayers?: { white: string; black: string };
   clockConvention: "unknown" | "post-move";
 
 }

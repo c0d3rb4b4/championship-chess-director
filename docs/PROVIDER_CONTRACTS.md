@@ -1,6 +1,8 @@
 # Phase 3 provider replay
 
-M0 is open. On 26 November 2026 the deployment endpoints could not be reached for a packet capture from the development host. No event PGN endpoint or verified event-to-provider game mapping was configured. The checked-in example is original synthetic data. The production event, round, deployed revisions, capture dates and redistribution permissions remain unverified.
+M0 is open for in-play updates and field verification. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
+
+At the initial offline checkpoint on 26 November 2026 the deployment endpoints could not be reached for a packet capture from the development host. No event PGN endpoint or verified event-to-provider game mapping was configured. The checked-in example is original synthetic data. At that checkpoint the production event, round, deployed revisions, capture dates and redistribution permissions were unverified.
 
 Run the offline replay from the repository root.
 
@@ -23,5 +25,19 @@ The example reconstructs 1.e4, a Sesse principal line of 1…e5 with a +0.25 Whi
 
 1. Record capture time in UTC, endpoint, revision or version header, event, round, authority ID, both players and colours, starting FEN and both analysis mappings. Confirm permission before committing provider payloads. Private captures can be replayed locally.
 2. Save a full observation, ordinary update, idle traffic, transport close and recovery for each source. Preserve raw PGN, JSON bodies and Sesse request ims plus response X-RGLM. Keep Leela subscription requests and assign a distinct local connection generation to every reconnect or switch.
-3. Wrap the chronological observations using the example envelope. For Sesse, base is the request's version and version is the response's X-RGLM. Record disconnect events for Sesse and Leela. After an authority move prefix changes, supply a fresh Sesse snapshot and a new Leela subscription plus matching position. Retain original transport logs alongside the replay for timing and authority availability review.
+3. Wrap the chronological observations using the example envelope. For Sesse, base is the request's version and version is the response's X-RGLM. Record disconnect events for all three sources. An authority disconnect carries the same authority and gameId as the PGN packet, with event set to disconnect and no body. During that gap the replay skips engine packets. Recovery requires a bound authority PGN, a full Sesse snapshot and a fresh Leela connection generation with a matching position. After an authority move prefix changes, supply a fresh Sesse snapshot and a new Leela subscription plus matching position. Retain original transport logs alongside the replay for timing and authority availability review.
 4. Replay twice and compare the emitted observations with the captured game, both advertised analyses and the original transport log. Verify result and clock convention, Sesse score and depth per line, Leela WDL source and denominator, and delayed frames across reconnects. Record unsupported fields individually. M0 closes after successful observed replay. OBS and viewer gates belong to Phase 6.
+
+## Observed deployment replay · 27 November 2026 UTC
+
+The selected game was Game 3 of the FIDE World Chess Championship in Geneva. The Lichess round ID was `fnmEB1kH`, chapter `RD8sbYw1`, PGN round `3.1`. White was Javokhir Sindarov (FIDE 14205483), Black was Gukesh D (46616543). The authority reported a draw after 60…Kf3 from the standard start. The replay matched all 120 plies and the final FEN. The provider PGN's Date header differs from the capture date.
+
+| Source | Deployment observation | Replay check |
+|---|---|---|
+| [Lichess round PGN](https://lichess.org/api/broadcast/round/fnmEB1kH.pgn) | GameURL identifies both round and chapter. The exported PGN includes FIDE IDs, colours, clock annotations and result. | Strict legal replay from the standard position. Clock conversion stayed disabled pending in-play convention verification. |
+| [Sesse](https://analysis.sesse.net/analysis.pl) | At 00:13 UTC the full response carried X-RGLM 1795738381508, engine Stockfish dev-20261115-m-18d93109-asn. Depth, candidate depths and nodes were decimal strings. A poll with that ims returned an empty delta and X-RGLM 1795738411509. | An explicit White alias `Sindarov` plus the exact Black name, history and FEN bound the snapshot. The principal move was Bg5 at depth 130 with a White score of 0.00 pawns and 1,367,603,783 nodes. Nine alternatives retained their individual depths. The idle delta preserved the analysis. |
+| [Leela Live](https://live.lczero.org/) | The deployed client asset referenced revision 98ff2cb0c3c0e80a83f87fa1eb90cb9e42dc191e. Its socket at `/api/ws` advertised game 483 with a feedUrl ending in `/fnmEB1kH/RD8sbYw1`. Subscribing to game 483, ply 120 returned positions, evaluations and a status heartbeat. | The final FEN matched. Evaluation 2804473 supplied nine legal UCI candidate lines, including Bg5 with 233,833 visits. Both position and variation records carried W/D/B fields. Perspective, calibration and the search-share denominator still need independent verification. |
+
+The checked-in tests use original examples. Provider payload redistribution terms have yet to be verified. The finished game supplied a final mainline and archived analysis. In-play move and clock changes, substantive Sesse deltas and evolving Leela evaluations on a common live root still require a capture during play.
+
+The private recording `game-3-provider-replay.json` contains 16 timestamped packets including a client-initiated close, fresh HTTP reads and a second WebSocket subscription. Both generations reconstructed the same final Leela evaluation. Replaying twice with the command above emitted 11 byte-identical JSONL observations per run. Recording SHA-256: `a2c77f860bba6922310de086feb0acfe845eb3937c6de2bf70bae431551d903f`. Output SHA-256: `d73277fc2ab150c3cc8a4edc830d7d6cb1c87db6ceff18cd1635bc84eb2f4cb6`.

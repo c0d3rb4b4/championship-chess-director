@@ -43,18 +43,23 @@ function score(value: unknown) {
   if (kind === "m") return { unit: "mate" as const, value: n, bound };
 }
 
+function searchCount(value: unknown) {
+  return count(typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value);
+}
+
 function decode(raw: unknown, game: Game) {
   const data = object(raw), position = object(data.position);
   if (!game.white || !game.black || game.white === "?" || game.black === "?" ||
-      position.player_w !== game.white || position.player_b !== game.black)
+      position.player_w !== (game.binding.sessePlayers?.white ?? game.white) ||
+      position.player_b !== (game.binding.sessePlayers?.black ?? game.black))
     throw Error("Unbound Sesse players");
   if (position.fen !== game.fen || JSON.stringify(position.history) !== JSON.stringify(game.moves))
     throw Error("Wrong Sesse root");
   const candidate = (entry: Record<string, unknown>) => ({
-    pv: line(game, list(entry.pv)), depth: count(entry.depth), score: score(entry.score)
+    pv: line(game, list(entry.pv)), depth: searchCount(entry.depth), score: score(entry.score)
   });
   const alternatives = Object.values(object(data.refutation_lines ?? {})).map(v => candidate(object(v)));
-  return { fen: game.fen, perspective: "white" as const, principal: candidate(data), alternatives, nodes: count(data.nodes) };
+  return { fen: game.fen, perspective: "white" as const, principal: candidate(data), alternatives, nodes: searchCount(data.nodes) };
 }
 
 // One instance per operator-verified Sesse game mapping and authority root.
