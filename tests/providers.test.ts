@@ -68,3 +68,16 @@ test("Leela partial frames preserve candidates and reject stale subscriptions or
   assert.equal(receive({ positions }), undefined);
   assert.equal(switched({ positions, evaluations: update(1, "e7e5") }), undefined);
 });
+
+test("Sesse accepts explicitly bound display names and decimal-string search counts", () => {
+  const bound = { ...game, binding: { ...binding, sessePlayers: { white: "A.", black: "Beta" } } };
+  const wire = { ...full, position: { ...full.position, player_w: "A." }, depth: "30", nodes: "320",
+    refutation_lines: { c5: { ...full.refutation_lines.c5, depth: "19" } } };
+  const source = new SesseReplay(bound);
+  const result = source.receive("1", undefined, wire, 0);
+  assert.equal(result.nodes, 320);
+  assert.equal(result.principal.depth, 30);
+  assert.equal(result.alternatives[0].depth, 19);
+  assert.throws(() => new SesseReplay(game).receive("1", undefined, wire, 0));
+  assert.equal(source.receive("2", undefined, { ...wire, nodes: "9e3" }, 1).nodes, undefined);
+});
