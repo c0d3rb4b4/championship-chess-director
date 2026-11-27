@@ -1,0 +1,373 @@
+{
+  "provenance": "Original synthetic in-play provider rehearsal",
+  "binding": {
+    "authority": "event-pgn",
+    "gameId": "r1",
+    "event": "Provider rehearsal",
+    "round": "1",
+    "whiteId": "101",
+    "blackId": "102",
+    "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+    "clockConvention": "post-move"
+  },
+  "leelaGameId": 7,
+  "packets": [
+    {
+      "source": "authority",
+      "receivedMs": 0,
+      "authority": "event-pgn",
+      "gameId": "r1",
+      "body": "[Event \"Provider rehearsal\"]\n[Round \"1\"]\n[White \"Alpha\"]\n[Black \"Beta\"]\n[WhiteFideId \"101\"]\n[BlackFideId \"102\"]\n\n1. e4 {[%clk 0:09:58]} *"
+    },
+    {
+      "source": "sesse",
+      "receivedMs": 1,
+      "version": "100",
+      "body": {
+        "position": {
+          "player_w": "Alpha",
+          "player_b": "Beta",
+          "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+          "history": [
+            "e4"
+          ]
+        },
+        "pv": [
+          "e5"
+        ],
+        "depth": "30",
+        "score": [
+          "cp",
+          25
+        ],
+        "nodes": 320
+      }
+    },
+    {
+      "source": "sesse",
+      "receivedMs": 2,
+      "base": "100",
+      "version": "101",
+      "body": [
+        [
+          [
+            "nodes"
+          ],
+          555
+        ]
+      ]
+    },
+    {
+      "source": "leela",
+      "receivedMs": 3,
+      "event": "subscribe",
+      "connection": 1,
+      "gameId": 7
+    },
+    {
+      "source": "leela",
+      "receivedMs": 4,
+      "connection": 1,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "evalId": 1,
+            "variations": [
+              {
+                "pvUci": "c7c5",
+                "nodes": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "sesse",
+      "receivedMs": 5,
+      "version": "102",
+      "base": "101",
+      "body": [
+        [
+          [
+            "pv"
+          ],
+          [
+            "e5",
+            "Nf3"
+          ]
+        ],
+        [
+          [
+            "depth"
+          ],
+          "32"
+        ],
+        [
+          [
+            "nodes"
+          ],
+          "910"
+        ]
+      ]
+    },
+    {
+      "source": "leela",
+      "receivedMs": 6,
+      "connection": 1,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "evalId": 2,
+            "variations": [
+              {
+                "pvUci": "c7c5 g1f3",
+                "nodes": 200
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "authority",
+      "receivedMs": 7,
+      "authority": "event-pgn",
+      "gameId": "r1",
+      "body": "[Event \"Provider rehearsal\"]\n[Round \"1\"]\n[White \"Alpha\"]\n[Black \"Beta\"]\n[WhiteFideId \"101\"]\n[BlackFideId \"102\"]\n\n1. e4 {[%clk 0:09:58]} e5 {[%clk 0:09:54]} *"
+    },
+    {
+      "source": "leela",
+      "receivedMs": 8,
+      "connection": 1,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "evalId": 1,
+            "variations": [
+              {
+                "pvUci": "c7c5",
+                "nodes": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "sesse",
+      "receivedMs": 9,
+      "version": "103",
+      "body": {
+        "position": {
+          "player_w": "Alpha",
+          "player_b": "Beta",
+          "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+          "history": [
+            "e4",
+            "e5"
+          ]
+        },
+        "pv": [
+          "Nf3",
+          "Nc6"
+        ],
+        "depth": "25",
+        "score": [
+          "cp",
+          25
+        ],
+        "nodes": "410"
+      }
+    },
+    {
+      "source": "leela",
+      "receivedMs": 10,
+      "event": "subscribe",
+      "connection": 2,
+      "gameId": 7
+    },
+    {
+      "source": "leela",
+      "receivedMs": 11,
+      "connection": 2,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 2,
+            "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 2,
+            "evalId": 3,
+            "variations": [
+              {
+                "pvUci": "f1c4 g8f6",
+                "nodes": 180
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "authority",
+      "event": "disconnect",
+      "authority": "event-pgn",
+      "gameId": "r1",
+      "receivedMs": 12
+    },
+    {
+      "source": "leela",
+      "receivedMs": 13,
+      "connection": 2,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "evalId": 1,
+            "variations": [
+              {
+                "pvUci": "c7c5",
+                "nodes": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "authority",
+      "receivedMs": 14,
+      "authority": "event-pgn",
+      "gameId": "r1",
+      "body": "[Event \"Provider rehearsal\"]\n[Round \"1\"]\n[White \"Alpha\"]\n[Black \"Beta\"]\n[WhiteFideId \"101\"]\n[BlackFideId \"102\"]\n\n1. e4 {[%clk 0:09:58]} e5 {[%clk 0:09:54]} *"
+    },
+    {
+      "source": "sesse",
+      "receivedMs": 15,
+      "version": "103",
+      "body": {
+        "position": {
+          "player_w": "Alpha",
+          "player_b": "Beta",
+          "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+          "history": [
+            "e4",
+            "e5"
+          ]
+        },
+        "pv": [
+          "Nf3",
+          "Nc6"
+        ],
+        "depth": "25",
+        "score": [
+          "cp",
+          25
+        ],
+        "nodes": "410"
+      }
+    },
+    {
+      "source": "leela",
+      "receivedMs": 16,
+      "event": "subscribe",
+      "connection": 3,
+      "gameId": 7
+    },
+    {
+      "source": "leela",
+      "receivedMs": 17,
+      "connection": 2,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 1,
+            "evalId": 1,
+            "variations": [
+              {
+                "pvUci": "c7c5",
+                "nodes": 80
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "leela",
+      "receivedMs": 18,
+      "connection": 3,
+      "body": {
+        "positions": [
+          {
+            "gameId": 7,
+            "ply": 2,
+            "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
+          }
+        ],
+        "evaluations": [
+          {
+            "gameId": 7,
+            "ply": 2,
+            "evalId": 4,
+            "variations": [
+              {
+                "pvUci": "f1c4 g8f6",
+                "nodes": 180
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

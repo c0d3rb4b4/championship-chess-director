@@ -47,7 +47,7 @@ function engineSheet(engine: EngineView): string {
       ? `<div class="pawn-score"><span>White eval · pawns</span><strong>${e(engine.score)}</strong></div>`
       : "";
   const rows = engine.candidates.slice(0, 3).map((line, i) =>
-    `<tr><td>${i + 1}</td><th scope="row">${e(line.moves[0])}</th><td>${e(line.moves.slice(1, 5).join("  "))}</td><td>${line.depth}</td></tr>`
+    `<tr><td>${i + 1}</td><th scope="row">${e(line.moves[0])}</th><td>${e(line.moves.slice(1, 5).join("  "))}</td><td>${line.depth ?? "—"}</td></tr>`
   ).join("");
   return `<section class="engine-sheet ${engine.id}">
     <header><div><h2>${e(engine.name)}</h2><p>${engine.id === "sesse" ? e(engine.source) + " · " : ""}${e(engine.status)}</p></div>${stats}</header>

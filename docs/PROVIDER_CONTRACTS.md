@@ -41,3 +41,11 @@ The selected game was Game 3 of the FIDE World Chess Championship in Geneva. The
 The checked-in tests use original examples. Provider payload redistribution terms have yet to be verified. The finished game supplied a final mainline and archived analysis. In-play move and clock changes, substantive Sesse deltas and evolving Leela evaluations on a common live root still require a capture during play.
 
 The private recording `game-3-provider-replay.json` contains 16 timestamped packets including a client-initiated close, fresh HTTP reads and a second WebSocket subscription. Both generations reconstructed the same final Leela evaluation. Replaying twice with the command above emitted 11 byte-identical JSONL observations per run. Recording SHA-256: `a2c77f860bba6922310de086feb0acfe845eb3937c6de2bf70bae431551d903f`. Output SHA-256: `d73277fc2ab150c3cc8a4edc830d7d6cb1c87db6ceff18cd1635bc84eb2f4cb6`.
+
+## In-play screenshot simulation
+
+Run `npm ci`, `npx playwright install --with-deps --no-shell chromium`, then `npm run screenshots:providers`. The browser test runs the replay CLI on the synthetic recording in `fixtures/provider-simulation.json` and feeds the decoded states to the programme renderer. The simulation uses ten-minute starting clocks and post-move clock annotations. Packet timestamps establish event order.
+
+The seven numbered stages cover the bound position after 1.e4, independent search updates, both engines pending after 1…e5, Sesse returning first, both engines returning, the authority reconnecting and analysis recovering. The test checks stale packets, SAN, clocks, per-source candidates and absence of unverified WDL.
+
+**Provider simulation screenshots** runs on PRs targeting main, after merges to main, and on manual dispatch. Download the commit-labelled artifact from a successful workflow run. It contains fourteen PNGs at 1920 × 1080 and 1280 × 720 plus the stage snapshots in `stages.json`. Artifacts are retained for 30 days. Local output is in `test-results/provider-screenshots/`. The deployed in-play checks above remain open.
