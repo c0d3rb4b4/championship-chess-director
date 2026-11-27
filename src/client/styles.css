@@ -145,6 +145,7 @@ p {
 .board-slug, .analysis-region h2 { display: inline-flex; height: 40px; align-items: center; }
 .actual-board-wrap, .analysis-board { width: 768px; height: 768px; margin-top: 16px; }
 .actual-board-wrap, .comparison-panel { transform-origin: left top; }
+.actual-board-wrap[data-move-highlight-pending] [data-last-move-square] { opacity: 0; }
 .chessboard { display: block; width: 100%; height: 100%; }
 .mini-board .plate-sheen, .mini-board .plate-grain { opacity: .35; }
 .mini-board .plate-fasteners { display: none; }

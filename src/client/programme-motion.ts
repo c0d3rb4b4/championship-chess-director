@@ -1,12 +1,23 @@
-const ease = "cubic-bezier(.22,.77,.16,1)";
-const offRight = "translateX(1344px)";
+const panelEase = "cubic-bezier(.22,.77,.16,1)";
+const travelEase = "cubic-bezier(.42, 0, .58, 1)";
+const spotlightDuration = 1050;
+const interruptionDuration = 750;
 const active = new Set<Animation>();
-let departing: HTMLElement | undefined;
+let departing: { layer: HTMLElement; animation: Animation } | undefined;
+let pendingHighlight: HTMLElement | undefined;
+
+type Motion = "cut" | "normal" | "interruption";
 
 export const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-function animate(element: HTMLElement, frames: Keyframe[], options: KeyframeAnimationOptions) {
+function animate(
+  element: Element,
+  frames: Keyframe[],
+  options: KeyframeAnimationOptions,
+  startTime?: CSSNumberish | null,
+) {
   const animation = element.animate(frames, options);
+  if (startTime != null) animation.startTime = startTime;
   active.add(animation);
   const forget = () => active.delete(animation);
   animation.addEventListener("finish", forget, { once: true });
@@ -14,11 +25,19 @@ function animate(element: HTMLElement, frames: Keyframe[], options: KeyframeAnim
   return animation;
 }
 
-export function cutProgrammeMotion(): void {
+function showPendingHighlight() {
+  const board = pendingHighlight;
+  board?.removeAttribute("data-move-highlight-pending");
+  pendingHighlight = undefined;
+  return board;
+}
+
+export function cutProgrammeMotion(keep?: HTMLElement): void {
   for (const animation of active) animation.cancel();
   active.clear();
-  departing?.remove();
+  if (departing && departing.layer !== keep) departing.layer.remove();
   departing = undefined;
+  showPendingHighlight();
 }
 
 reducedMotion.addEventListener("change", () => {
@@ -29,30 +48,31 @@ export function revealPanel(panel: HTMLElement, delay = 0): void {
   animate(panel, [
     { opacity: delay ? 0 : .38, transform: "translate(64px, 28px) scale(.965)" },
     { opacity: 1, transform: "translate(0, 0) scale(1)" },
-  ], { duration: 760, delay, easing: ease, fill: "backwards" });
+  ], { duration: 760, delay, easing: panelEase, fill: "backwards" });
 }
 
 export function switchSpotlight(
   programme: HTMLElement,
   spotlight: boolean,
   incomingMarkup: string,
-  motion: boolean,
+  motion: Motion,
 ): void {
   const actual = programme.querySelector<HTMLElement>(".actual-game")!;
   const board = actual.querySelector<HTMLElement>(".actual-board-wrap")!;
   const leaving = programme.querySelector<HTMLElement>(
-    spotlight ? ".comparison-panel:not([data-departing])" : ".spotlight-layer:not([data-departing])",
+    spotlight ? ".comparison-panel:not([data-departing])" : ".spotlight-layer",
   )!;
-  const from = motion ? board.getBoundingClientRect() : undefined;
+  const from = motion === "cut" ? undefined : board.getBoundingClientRect();
   const leavingStyle = getComputedStyle(leaving);
   const leavingStart = { transform: leavingStyle.transform, opacity: leavingStyle.opacity };
-  cutProgrammeMotion();
+  cutProgrammeMotion(leaving);
 
   actual.classList.toggle("large-actual", !spotlight);
   actual.classList.toggle("mini-actual", spotlight);
   board.classList.toggle("mini-board", spotlight);
   const position = actual.querySelector<HTMLElement>(".mini-position")!;
   position.hidden = !spotlight;
+  if (!spotlight) programme.querySelector(".comparison-panel:not([data-departing])")?.remove();
   actual.insertAdjacentHTML("afterend", incomingMarkup);
   const incoming = actual.nextElementSibling as HTMLElement;
   if (!from) {
@@ -60,19 +80,23 @@ export function switchSpotlight(
     return;
   }
 
-  // Measure in canvas pixels so the same trajectory works at 720p and 1080p.
+  // Both board edges interpolate with the same progress. A gap at both
+  // endpoints leaves a gap throughout, including when resuming from mid-flight.
   const to = board.getBoundingClientRect();
   const canvasScale = programme.getBoundingClientRect().width / programme.offsetWidth;
-  const travel = { duration: 1050, easing: ease, fill: "backwards" } as const;
+  const duration = motion === "interruption" ? interruptionDuration : spotlightDuration;
+  const startTime = programme.ownerDocument.timeline.currentTime;
+  const travel = { duration, easing: travelEase, fill: "backwards" } as const;
+  const line = (spotlight ? incoming : leaving).querySelector<HTMLElement>(".analysis-region")!;
+  const offRight = `translateX(${programme.offsetWidth - line.offsetLeft}px)`;
   if (canvasScale > 0 && to.width > 0) {
     const x = (from.left - to.left) / canvasScale;
     const y = (from.top - to.top) / canvasScale;
-    animate(actual, [{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], travel);
-    animate(board, [{ transform: `scale(${from.width / to.width})` }, { transform: "none" }], travel);
+    animate(actual, [{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], travel, startTime);
+    animate(board, [{ transform: `scale(${from.width / to.width})` }, { transform: "none" }], travel, startTime);
   }
 
   // Only the outgoing artwork survives the cut; it can no longer represent a live scene.
-  departing = leaving;
   leaving.dataset.departing = "";
   leaving.inert = true;
   leaving.setAttribute("aria-hidden", "true");
@@ -82,24 +106,34 @@ export function switchSpotlight(
     spotlight ? { transform: "translate(80px, -32px) scale(.97)", opacity: 0 }
       : { transform: offRight, opacity: 1 },
   ], {
-    duration: spotlight ? 460 : 950,
-    easing: spotlight ? ease : "cubic-bezier(.45,.05,.75,.45)",
+    duration: spotlight ? 460 : duration,
+    easing: spotlight ? panelEase : travelEase,
     fill: "forwards",
-  });
+  }, startTime);
+  departing = { layer: leaving, animation: departure };
   departure.addEventListener("finish", () => {
+    if (departing?.animation !== departure) return;
     leaving.remove();
-    if (departing === leaving) departing = undefined;
+    departing = undefined;
+    const settled = showPendingHighlight();
+    settled?.querySelectorAll("[data-last-move-square]").forEach(square => {
+      animate(square, [{ opacity: 0 }, { opacity: 1 }], {
+        duration: 220,
+        easing: panelEase,
+        fill: "backwards",
+      });
+    });
   }, { once: true });
 
   if (spotlight) {
-    animate(incoming, [
-      { transform: offRight },
-      { transform: "translateX(-16px)", offset: .82 },
-      { transform: "none" },
-    ], { duration: 980, delay: 100, easing: ease, fill: "backwards" });
+    animate(incoming, [{ transform: offRight }, { transform: "none" }], travel, startTime);
     animate(position, [{ opacity: 0 }, { opacity: 1 }],
-      { duration: 280, delay: 770, easing: ease, fill: "backwards" });
+      { duration: 280, delay: duration - 280, easing: panelEase, fill: "backwards" });
   } else {
-    revealPanel(incoming, 360);
+    if (motion === "interruption") {
+      board.dataset.moveHighlightPending = "";
+      pendingHighlight = board;
+    }
+    revealPanel(incoming, motion === "interruption" ? duration : 360);
   }
 }

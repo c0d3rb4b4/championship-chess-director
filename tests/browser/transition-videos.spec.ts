@@ -15,7 +15,7 @@ const clips = [
     moments: [spotlight - 1, spotlight, spotlight + 2000, spotlight + 4000, spotlight + 6000, "return-live"],
     holdMs: 2000,
   },
-  { name: "04-move-interruption", moments: [move - 1, move, 89_000, 90_000, 96_000], holdMs: 1600 },
+  { name: "04-move-interruption", moments: [move - 1, move, 89_000, 90_000, 96_000], holdMs: 2000 },
 ] as const;
 
 test.use({ viewport, reducedMotion: "no-preference", video: { mode: "on", size: viewport } });
@@ -33,7 +33,7 @@ test.describe("720p programme transition clips", { tag: "@review-captures" }, ()
       const actual = page.getByTestId("actual-board");
       await expect(output).toHaveAttribute("data-instance", initial.scene.instance);
       await expect(page.locator(".connection-banner")).toBeHidden();
-      // Hold each cue on screen for review. The programme plays its normal entrance animation.
+      // Leave time to see each cue settle, including the played-move highlight.
       await page.waitForTimeout(1200);
       for (const cue of cues) {
         const snapshot = typeof cue === "number" ? director.advanceTo(cue) : director.command(cue);

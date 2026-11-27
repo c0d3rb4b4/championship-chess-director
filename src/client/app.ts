@@ -102,12 +102,15 @@ function supportingScene(s: ProgrammeSnapshot): string {
     ? `<div class="spotlight-layer">${spotlightContents(s)}</div>`
     : `<section class="comparison-panel" aria-label="Engine analysis">${supportingPanel(s)}</section>`;
 }
+function programmeHeader(s: ProgrammeSnapshot): string {
+  return `<header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
+       <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
+       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>`;
+}
 function programme(s: ProgrammeSnapshot): string {
   const spotlight = s.scene.kind === "spotlight";
   return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
-    <header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
-       <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
-       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>
+    ${programmeHeader(s)}
     <section class="actual-game ${spotlight ? "mini-actual" : "large-actual"}"><h2 class="board-slug">Actual game</h2>
       <div class="actual-board-wrap${spotlight ? " mini-board" : ""}">${board(s.actual, "actual")}</div>
       <p class="mini-position" ${spotlight ? "" : "hidden"}>${e(s.actual.moveLabel)}</p></section>
@@ -121,9 +124,16 @@ function resizeProgramme(): void {
       String(Math.min(innerWidth / 1920, innerHeight / 1080)),
     );
 }
-let renderedRoot = "";
+let renderedGame: ProgrammeSnapshot["game"] | undefined;
 let renderedKind = "";
 let renderedInstance = "";
+function isNextPlayedMove(s: ProgrammeSnapshot): boolean {
+  const previous = renderedGame;
+  return Boolean(previous && s.scene.kind === "actual-move" &&
+    s.game.id === previous.id && s.game.epoch === previous.epoch && s.game.revision === previous.revision &&
+    s.game.ply === previous.ply + 1 && previous.moves.every((move, index) => s.game.moves[index] === move));
+}
+
 function renderProgramme(s: ProgrammeSnapshot): void {
   const key = JSON.stringify([s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
     s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
@@ -133,9 +143,17 @@ function renderProgramme(s: ProgrammeSnapshot): void {
     renderKey = key;
     const main = app.querySelector<HTMLElement>(".programme");
     const spotlight = s.scene.kind === "spotlight";
-    if (main && renderedRoot === s.game.rootKey) {
-      if (spotlight !== (renderedKind === "spotlight")) {
-        switchSpotlight(main, spotlight, supportingScene(s), motion);
+    const interrupted = motion && isNextPlayedMove(s) && main?.querySelector(".spotlight-layer");
+    if (main && (renderedGame?.rootKey === s.game.rootKey || interrupted)) {
+      if (interrupted) {
+        // Publish the played position immediately, then reveal its tint on landing.
+        main.querySelector(".actual-board-wrap")!.innerHTML = board(s.actual, "actual");
+        main.querySelector(".mini-position")!.textContent = s.actual.moveLabel;
+        main.querySelector(".programme-header")!.outerHTML = programmeHeader(s);
+        main.querySelector(".played-moves")!.outerHTML = playedMoves(s);
+        switchSpotlight(main, false, supportingScene(s), "interruption");
+      } else if (spotlight !== (renderedKind === "spotlight")) {
+        switchSpotlight(main, spotlight, supportingScene(s), motion ? "normal" : "cut");
       } else if (spotlight) {
         // Keep the animated layer in place as the hypothetical line advances.
         main.querySelector(".spotlight-layer:not([data-departing])")!.innerHTML = spotlightContents(s);
@@ -150,7 +168,7 @@ function renderProgramme(s: ProgrammeSnapshot): void {
       main.dataset.instance = s.scene.instance;
       main.dataset.scene = s.scene.kind;
     } else {
-      // A played move or correction takes the entire old position off air immediately.
+      // A new game or correction replaces the scene immediately.
       cutProgrammeMotion();
       app.innerHTML = programme(s);
       resizeProgramme();
@@ -158,7 +176,7 @@ function renderProgramme(s: ProgrammeSnapshot): void {
       if (motion && panel) revealPanel(panel);
     }
     renderedKind = s.scene.kind;
-    renderedRoot = s.game.rootKey;
+    renderedGame = s.game;
     renderedInstance = s.scene.instance;
   }
   for (const [color, ms] of [

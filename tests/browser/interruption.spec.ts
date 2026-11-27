@@ -13,7 +13,7 @@ async function captureScene(page: Page, scene: string): Promise<void> {
   await page.setViewportSize({ width: 1920, height: 1080 });
 }
 
-test("operator drives two shared programme viewers; a real move cancels playback and restores 768px actual board", async ({
+test("two programme viewers receive the played position immediately and highlight it after the fast return", async ({
   page,
   context,
   request,
@@ -121,6 +121,12 @@ test("operator drives two shared programme viewers; a real move cancels playback
     "actual-move",
     { timeout: 500 },
   );
+  const playedFen = new Director().command("release-move").actual.fen;
+  await Promise.all(
+    [programme, second].map(viewer =>
+      expect(viewer.getByTestId("actual-board")).toHaveAttribute("data-fen", playedFen, { timeout: 500 }),
+    ),
+  );
   await Promise.all(
     [programme, second].map((viewer) =>
       viewer.evaluate(
@@ -134,11 +140,11 @@ test("operator drives two shared programme viewers; a real move cancels playback
   const clickToPaintMs = performance.now() - started;
   expect(clickToPaintMs).toBeLessThan(500);
   await expect(programme.getByTestId("analysis-board")).toHaveCount(0);
-  await expect(actual).not.toHaveAttribute("data-fen", root!);
+  await expect(programme.locator(".analysis-region")).toHaveCount(0);
   await expect(actualTint).toHaveCount(2);
-  await expect(actual.locator('[data-last-move-square="d3"]')).toHaveCount(1);
-  await expect(actual.locator('[data-last-move-square="d4"]')).toHaveCount(1);
-  expect((await actual.boundingBox())!.width).toBe(768);
+  await expect(actual.locator('[data-last-move-square="d3"]')).toHaveCSS("opacity", "1");
+  await expect(actual.locator('[data-last-move-square="d4"]')).toHaveCSS("opacity", "1");
+  await expect.poll(async () => (await actual.boundingBox())?.width).toBe(768);
   await expect(
     programme.getByText("Updating for this position", { exact: true }),
   ).toBeVisible();
@@ -177,7 +183,7 @@ test("operator drives two shared programme viewers; a real move cancels playback
       clickToPaintMs,
       viewers: 2,
       targetMs: 500,
-      note: "Operator click to both DOM updates plus two animation frames; not an OBS capture benchmark.",
+      note: "Operator click to the played position in both browser viewers plus two animation frames. The visual highlight comes after the return.",
     },
     null,
     2,
@@ -266,6 +272,10 @@ test("reduced-motion spotlight cuts keep the real clock strip anchored", async (
   await page.getByRole("button", { name: "Play actual move" }).click();
   await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move");
   await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);
+  await expect(viewer.locator(".analysis-region")).toHaveCount(0);
+  await expect(viewer.getByTestId("actual-board").locator('[data-last-move-square="d4"]')).toHaveCSS("opacity", "1");
+  expect(await viewer.getByTestId("programme").evaluate(programme =>
+    programme.getAnimations({ subtree: true }).length)).toBe(0);
   expect(await strip.boundingBox()).toEqual(bounds);
 });
 
