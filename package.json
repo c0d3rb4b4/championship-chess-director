@@ -13,7 +13,7 @@
     "check": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
-    "screenshots:providers": "playwright test provider-simulation.spec.ts"
+    "screenshots:providers": "playwright test --grep @review-captures"
   },
   "dependencies": {
     "chess.js": "1.4.0"

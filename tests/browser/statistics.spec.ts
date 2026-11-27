@@ -3,9 +3,10 @@ import { mkdir } from "node:fs/promises";
 import { Director } from "../../src/server/director.js";
 import type { ProgrammeSnapshot } from "../../src/shared/types.js";
 
-test("ordinary panels fit both broadcast sizes with typical, missing and extended values", async ({page}) => {
+test("ordinary panels fit both broadcast sizes with typical, missing and extended values", { tag: "@review-captures" }, async ({page}) => {
   test.setTimeout(90000);
-  await mkdir("docs/evidence/phase-2", { recursive: true });
+  const dir = "test-results/provider-screenshots/statistics";
+  await mkdir(dir, { recursive: true });
   let snapshot: ProgrammeSnapshot;
   await page.route("**/api/programme", route => route.fulfill({json:snapshot}));
   for (const [panel, atMs] of [["outcomes",20000],["time",38000],["search",58000],["history",156000]] as const) {
@@ -36,8 +37,15 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
           const card = page.locator(`[data-panel="${panel}"]`);
           await expect(card).toBeVisible();
           expect(await card.evaluate(el => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth)).toBe(true);
+          const axes = panel === "time" ? ["Minutes on completed moves"] :
+            panel === "history" ? ["Pawns", "Leela · Probability (%)"] : [];
+          for (const name of axes) {
+            const plot = card.getByRole("img", { name, exact: true });
+            await expect(plot).toBeVisible();
+            await expect(plot.locator("circle").first()).toBeVisible();
+          }
         }
-        await page.screenshot({path:`docs/evidence/phase-2/${panel}-${variant}-${height}.jpg`, quality:80});
+        await page.screenshot({path:`${dir}/${panel}-${variant}-${height}.jpg`, quality:80});
       }
     }
   }

@@ -68,7 +68,7 @@ function simulate() {
   return states;
 }
 
-test("capture in-play provider replay at both broadcast sizes", async ({ page }) => {
+test("capture in-play provider replay at both broadcast sizes", { tag: "@review-captures" }, async ({ page }) => {
   const stages = [
     [4, "01-bound", "e5", "c5"], [6, "02-search-update", "e5", "c5"],
     [7, "03-move-pending", "", ""], [9, "04-sesse-return", "Nf3", ""],
