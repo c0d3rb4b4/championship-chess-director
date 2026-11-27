@@ -252,7 +252,9 @@ test("reduced-motion spotlight cuts keep the real clock strip anchored", async (
   await expect(viewer.locator(".scene-enter")).toHaveCount(0);
   expect(await strip.boundingBox()).toEqual(bounds);
   await page.getByRole("button", { name: "Cue variation" }).click();
-  await expect(viewer.locator(".variation-rail")).toHaveCSS("animation-name", "none");
+  await expect(viewer.getByTestId("analysis-board")).toBeInViewport({ ratio: .999 });
+  expect(await viewer.getByTestId("programme").evaluate(programme =>
+    programme.getAnimations({ subtree: true }).length)).toBe(0);
   expect(await strip.boundingBox()).toEqual(bounds);
   await page.getByRole("button", { name: "Return to actual" }).click();
   await expect(viewer.getByTestId("analysis-board")).toHaveCount(0);

@@ -72,11 +72,12 @@ test("panel transitions preserve the board and clocks and yield immediately to t
       await expect(page.locator("[data-panel]")).toHaveAttribute("data-panel",entering.panel);
       expect(await originalBoard!.evaluate(el => el.isConnected)).toBe(true);
       const card = page.locator(".comparison-panel");
-      const entrance = await card.evaluateHandle(el => el.getAnimations()[0] ?? null);
+      const entrance = await card.evaluateHandle(el => el.getAnimations({ subtree: true })[0] ?? null);
       if (motion === "reduce") expect(await entrance.jsonValue()).toBeNull();
+      else expect(await entrance.evaluate(animation => animation?.effect?.getComputedTiming().duration)).toBeGreaterThan(240);
       await send(director.advanceTo(time+1));
       expect(await card.evaluate((el, original) =>
-        el.getAnimations().every(a => a === original), entrance)).toBe(true);
+        el.getAnimations({ subtree: true }).every(a => a === original), entrance)).toBe(true);
       await send(director.command("release-move"));
       await expect(page.getByTestId("programme")).toHaveAttribute("data-scene","actual-move");
       await expect(page.locator("[data-panel]")).toHaveCount(0);

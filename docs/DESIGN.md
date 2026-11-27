@@ -74,7 +74,7 @@ After a spotlight, require a 90 s cooldown and 45 s of large-board time. Before 
 
 Use a fixed 1920 × 1080 canvas, scaled uniformly. The baseline reserves a 768-square actual board, a right-hand analysis region, a fixed header and a lower strip for recent played notation. Keep orientation fixed unless explicitly changed. In a spotlight retain a 416-square actual board on the left. Keep both player clocks and the side-to-move indication in the header. Give the 768-square analysis board a move rail, source, root move and permanent **ANALYSIS LINE NOT PLAYED** label. Only the actual board has clocks.
 
-Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Reveal an incoming supporting panel over 240 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars. For a long line, remove trailing whole plies before reducing type size. Keep check, mate, capture, castling, disambiguation and promotion marks intact.
+Use named engine columns on neutral score plates. Use 44–56 px clocks, 30–36 px headings and at least 22 px secondary text. Slide and fade an incoming supporting panel over 760 ms and coalesce visible evaluations to two refreshes per second. Actual moves bypass coalescing. Keep the page silent and free of controls and scrollbars. For a long line, remove trailing whole plies before reducing type size. Keep check, mate, capture, castling, disambiguation and promotion marks intact.
 
 ### Score strip, board identity and motion
 
@@ -90,13 +90,14 @@ The reference broadcast gives the board the most area, keeps clocks in a fixed s
 
 | Change | First visible frame | Motion |
 |---|---|---|
-| Enter spotlight | Mini actual board, both real clocks and persistent analysis warning | Incoming variation rail rises 8 px over 240 ms with ease-out. |
+| Enter spotlight | Full actual board in motion with both clocks anchored | The live board travels down and left and scales to 416 px over 1.05 s. The labelled analysis board and rail slide in from beyond the right edge and ease into place with a small overshoot. |
+| End spotlight at the same position | Actual board grows back into the main layout | The analysis board and rail slide out to the right over 950 ms. The live board returns over 1.05 s and the supporting panel slides in underneath. |
 | Actual move during playback | Replace the PV tree with the accepted board, new clock state and pending engine state | Cut the board. Reveal the supporting move graphic independently. |
 | Next PV ply or clock tick | Advance the current frame or digits | Retain label positions. No scene entrance. |
 | Reconnect, refresh, reduced motion | Render the eligible snapshot | Direct cut. Never queue a missed animation. |
 | WDL and history updates | Publish the new eligible value or point | Smooth bar width only within a root. Clear obsolete values immediately on a root change. |
 
-The pilot client receives full SSE snapshots. Keep the director authoritative and attach entrance motion only to a change of scene kind, outside the clock update path. Replacing obsolete nodes cancels their animations. Scene motion must never retain an old board overlay. For future panel rotation, key the transitioning region by scene instance, position root and content identity; do not rebuild the whole canvas for each statistic.
+The pilot client receives full SSE snapshots. The director owns scene timing and the sequence of hypothetical plies. The browser starts motion on a change of scene instance and preserves animated elements through clock and evaluation updates. A same-position return can retain the outgoing analysis artwork for the slide. A root change, disconnect or resnapshot immediately clears that artwork and cancels the prior motion.
 
 See the [phased implementation plan](PHASED_PLAN.md) for sequencing and release evidence.
 

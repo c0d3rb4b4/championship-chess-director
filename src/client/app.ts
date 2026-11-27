@@ -1,5 +1,6 @@
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
+import { cutProgrammeMotion, reducedMotion, revealPanel, switchSpotlight } from "./programme-motion.js";
 import type {
   Command,
   EngineView,
@@ -84,34 +85,33 @@ function supportingPanel(s: ProgrammeSnapshot): string {
            <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
       : s.engines.map(engineSheet).join("");
 }
-function programme(s: ProgrammeSnapshot): string {
-  const spotlight = s.scene.kind === "spotlight";
-
+function spotlightContents(s: ProgrammeSnapshot): string {
   const index = s.scene.frameIndex ?? 0;
-  let scene: string;
-  if (spotlight) {
-    const frames = s.scene.frames!;
-    const engine = s.engines.find(engine => engine.id === s.scene.source);
-    scene = `<section class="mini-actual"><h2 class="board-slug">Actual game</h2>
-        <div class="mini-board">${board(s.actual, "actual")}</div>
-        <p class="mini-position">${e(s.actual.moveLabel)}</p></section>
-      <section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2>
+  const frames = s.scene.frames!;
+  const engine = s.engines.find(engine => engine.id === s.scene.source);
+  return `<section class="analysis-region"><h2>ANALYSIS LINE NOT PLAYED</h2>
         <div class="analysis-board" data-frame="${index}">${board(frames[index], "analysis")}</div></section>
       <aside class="variation-rail"><header><h2>${e(engine?.name ?? s.scene.source ?? "Variation")}</h2>
           <span>${index} / ${frames.length - 1} plies</span></header>
         <ol>${frames.slice(1).map((frame, i) =>
           `<li${i + 1 === index ? ' class="current" aria-current="step"' : ""}>${e(frame.moveLabel)}</li>`
         ).join("")}</ol></aside>`;
-  } else {
-    scene = `<section class="large-actual"><h2 class="board-slug">Actual game</h2>
-             <div class="actual-board-wrap">${board(s.actual, "actual")}</div></section>
-             <section class="comparison-panel" aria-label="Engine analysis">${supportingPanel(s)}</section>`;
-  }
+}
+function supportingScene(s: ProgrammeSnapshot): string {
+  return s.scene.kind === "spotlight"
+    ? `<div class="spotlight-layer">${spotlightContents(s)}</div>`
+    : `<section class="comparison-panel" aria-label="Engine analysis">${supportingPanel(s)}</section>`;
+}
+function programme(s: ProgrammeSnapshot): string {
+  const spotlight = s.scene.kind === "spotlight";
   return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
     <header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
        <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
        <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span>${players(s)}</div></header>
-    ${scene}${playedMoves(s)}
+    <section class="actual-game ${spotlight ? "mini-actual" : "large-actual"}"><h2 class="board-slug">Actual game</h2>
+      <div class="actual-board-wrap${spotlight ? " mini-board" : ""}">${board(s.actual, "actual")}</div>
+      <p class="mini-position" ${spotlight ? "" : "hidden"}>${e(s.actual.moveLabel)}</p></section>
+    ${supportingScene(s)}${playedMoves(s)}
     <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED · Clocks paused</div></main>`;
 }
 function resizeProgramme(): void {
@@ -129,19 +129,33 @@ function renderProgramme(s: ProgrammeSnapshot): void {
     s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
   if (key !== renderKey) {
     const transition = renderedInstance && renderedInstance !== s.scene.instance;
+    const motion = Boolean(transition && connected && !recovering && !reducedMotion.matches);
     renderKey = key;
     const main = app.querySelector<HTMLElement>(".programme");
-    const panel = main?.querySelector(".comparison-panel");
-    if (main && panel && renderedKind === s.scene.kind && renderedRoot === s.game.rootKey) {
-      panel.innerHTML = supportingPanel(s);
+    const spotlight = s.scene.kind === "spotlight";
+    if (main && renderedRoot === s.game.rootKey) {
+      if (spotlight !== (renderedKind === "spotlight")) {
+        switchSpotlight(main, spotlight, supportingScene(s), motion);
+      } else if (spotlight) {
+        // Keep the animated layer in place as the hypothetical line advances.
+        main.querySelector(".spotlight-layer:not([data-departing])")!.innerHTML = spotlightContents(s);
+      } else {
+        const panel = main.querySelector<HTMLElement>(".comparison-panel:not([data-departing])")!;
+        panel.innerHTML = supportingPanel(s);
+        if (motion) {
+          panel.getAnimations().forEach(animation => animation.cancel());
+          revealPanel(panel);
+        }
+      }
       main.dataset.instance = s.scene.instance;
+      main.dataset.scene = s.scene.kind;
     } else {
+      // A played move or correction takes the entire old position off air immediately.
+      cutProgrammeMotion();
       app.innerHTML = programme(s);
       resizeProgramme();
-    }
-    if (connected && !recovering && transition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      app.querySelector(".comparison-panel, .variation-rail")?.animate(
-        [{opacity: .65, transform: "translateY(8px)"}, {opacity: 1, transform: "none"}], {duration: 240});
+      const panel = app.querySelector<HTMLElement>(".comparison-panel");
+      if (motion && panel) revealPanel(panel);
     }
     renderedKind = s.scene.kind;
     renderedRoot = s.game.rootKey;
@@ -314,6 +328,7 @@ async function sendCommand(command: Command): Promise<void> {
 }
 function connection(value: boolean): void {
   connected = value;
+  if (!value) cutProgrammeMotion();
   const banner = app.querySelector<HTMLElement>(".connection-banner");
   if (banner) banner.hidden = value;
   setText(
@@ -332,6 +347,7 @@ function accept(s: ProgrammeSnapshot): void {
 async function resnapshot(): Promise<void> {
   if (recovering) return;
   recovering = true;
+  cutProgrammeMotion();
   try {
     const response = await fetch("/api/programme", { cache: "no-store" });
     if (!response.ok) throw new Error("Snapshot unavailable");
