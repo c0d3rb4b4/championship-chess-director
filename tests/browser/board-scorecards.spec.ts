@@ -36,8 +36,9 @@ test("capture board-side player rows and both evaluation bars", { tag: "@review-
     }
     for (const height of [1080, 720]) {
       await page.setViewportSize({ width: height * 16 / 9, height });
+      await expect.poll(async () => (await actual.boundingBox())?.width)
+        .toBeCloseTo(width * height / 1080, 1);
       const board = (await actual.boundingBox())!;
-      expect(board.width).toBeCloseTo(width * height / 1080, 1);
       for (const row of [black, white]) {
         await expect(row).toBeInViewport({ ratio: .999 });
         const bounds = (await row.boundingBox())!;
