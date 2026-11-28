@@ -50,7 +50,7 @@ for (const [label, stem] of [
 }
 
 report.push("", "## Silent transitions", "");
-for (const name of ["auto-rotation", "auto-entrance", "auto-return", "auto-interrupt", "g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
+for (const name of ["auto-rotation", "auto-entrance", "auto-return", "auto-interrupt", "auto-move-cue", "g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
   report.push("- " + media(`videos/${name}-720p.mp4`, 1280, 720));
 }
 

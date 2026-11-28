@@ -189,7 +189,7 @@ test("the stats timer and ten-second move cue follow release, refresh and a seco
   const app = await rehearsal(60000, "pgn");
   const operator = await browser.newPage();
   const pages = await Promise.all([1080,720].map(h=>browser.newPage({viewport:{width:h*16/9,height:h}})));
-  await pages[1].emulateMedia({reducedMotion:"reduce"});
+  await pages[0].emulateMedia({reducedMotion:"reduce"});
   const views = pages.map(page=>page.getByTestId("programme"));
   const progress = (view:Locator) => view.locator(".panel-timer i").evaluate(el=>new DOMMatrix(getComputedStyle(el).transform).a);
   try {
@@ -205,23 +205,38 @@ test("the stats timer and ten-second move cue follow release, refresh and a seco
     await app.tick(132999);
     await expect(views[0].locator(".played-moves b")).toHaveText(["e4"]);
     await expect(views[0]).not.toHaveAttribute("data-move-cue","");
-    await app.tick(133000);
+    await mkdir(directory + "/../videos",{recursive:true});
+    await pages[1].screencast.start({path:directory + "/../videos/auto-move-cue-720p.webm",size:pages[1].viewportSize()!});
+    await pages[1].waitForTimeout(400);
+    const releasedAt = Date.now();
+    const advance = async (age:number) => {
+      await pages[1].waitForTimeout(Math.max(0,releasedAt + age - Date.now()));
+      await app.tick(133000 + age);
+    };
+    await advance(0);
     for (const view of views) {
       await expect(view).toHaveAttribute("data-move-cue","");
       await expect(view.locator(".played-moves b")).toHaveText(["e4","e5"]);
       expect(await progress(view)).toBeLessThan(.22);
     }
-    await app.tick(136000);
+    const pulse = views[1].locator(".move-cue-ring");
+    const opacity = () => pulse.evaluate(el=>Number(getComputedStyle(el).opacity));
+    await expect(views[0].locator(".move-cue-ring")).toHaveCSS("opacity","0.78");
+    await advance(1000); await expect.poll(opacity).toBeLessThan(.4);
+    await advance(2000); await expect.poll(opacity).toBeGreaterThan(.7);
+    await advance(3000);
     await pages[0].reload();
     await expect(views[0]).toHaveAttribute("data-move-cue","");
     expect(await progress(views[0])).toBeGreaterThan(.45);
     await mkdir(directory,{recursive:true});
     // Save an in-progress cue, with the normal six-second move emphasis still on air.
     await Promise.all(pages.map(p=>p.screenshot({path:`${directory}/move-cue-${p.viewportSize()!.height}.jpg`,quality:90})));
-    await app.tick(142000);
+    for (let age=4000; age<=9000; age+=1000) await advance(age);
     await expect(views[0]).toHaveAttribute("data-move-cue","");
-    await app.tick(143000);
+    await advance(10000);
     for (const view of views) await expect(view).not.toHaveAttribute("data-move-cue","");
+    await pages[1].waitForTimeout(550);
+    await pages[1].screencast.stop();
     app.score(["e4","e5","Nf3"]); await app.tick(144000);
     app.score(["e4","e5","Nf3","Nc6"]); await app.tick(147000);
     await app.tick(204000); await app.tick(206000);
