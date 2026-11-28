@@ -105,3 +105,28 @@ export interface HistoryRow {
   leela?: { percentages: [number, number, number]; observedMs: number; version: number };
   cutoffMs: number;
 }
+
+import type { Catalogue, CatalogueGame, GameSummary } from "./catalogue.js";
+
+export interface RealProgramme {
+  mode: "REAL";
+  streamId?: string;
+  sequence: number;
+  selectionEpoch: number;
+  eventName: string;
+  timeZone: string;
+  game: Omit<CatalogueGame, "binding" | "startFen"> | null;
+  state: "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable";
+  summary: (GameSummary & { observedAt: string }) | null;
+}
+
+export type BroadcastSnapshot = RealProgramme | (ProgrammeSnapshot & { selectionEpoch?: number; streamId?: string });
+
+export interface SelectionControls {
+  selectionEpoch: number;
+  catalogue: Catalogue;
+  authorityStatus: "idle" | "pending-binding" | "loading" | "verified" | "mismatch" | "unavailable";
+  diagnostic: string | null;
+}
+
+export type BroadcastOperator = SelectionControls & (OperatorSnapshot | { programme: RealProgramme });

@@ -13,7 +13,7 @@ export default defineConfig({
   webServer: {
     command: "npm run build && npm start",
     url: "http://127.0.0.1:4199/api/programme",
-    env: { PORT: "4199", DEMO_DB: ":memory:" },
+    env: { PORT: "4199", DEMO_DB: ":memory:", START_IN_DEMO: "1" },
     reuseExistingServer: false,
   },
 });

@@ -5,8 +5,7 @@ import {
 } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { performance } from "node:perf_hooks";
-import { Director } from "./director.js";
+import { Broadcast, CommandError } from "./broadcast.js";
 import { Store } from "./store.js";
 import type { Command } from "../shared/types.js";
 
@@ -20,26 +19,22 @@ export function createBroadcastServer(options: {
   dbPath: string;
   publicDir: string;
   now?: () => number;
+  wallNow?: () => number;
+  request?: typeof fetch;
+  cataloguePath?: string;
+  startInDemo?: boolean;
 }) {
-  const now = options.now ?? (() => performance.now());
   const store = new Store(options.dbPath);
-  const director = new Director(store.load());
-  let baseMs = director.checkpoint().elapsedMs;
-  let anchor = now();
-  let current = director.snapshot();
-  let lastPersistedSecond = -1;
   const clients = new Set<ServerResponse>();
-  function refresh() {
-    current = director.advanceTo(baseMs + Math.max(0, now() - anchor));
-    // The demo resumes at its persisted presentation time after server downtime.
-    const second = Math.floor(current.presentationMs / 1000);
-    if (second !== lastPersistedSecond) {
-      store.save(director.checkpoint());
-      lastPersistedSecond = second;
-    }
-    return current;
+  let output: Broadcast;
+  try {
+    output = new Broadcast(store, options, broadcast);
+  } catch (error) {
+    store.close();
+    throw error;
   }
   function broadcast() {
+    const current = output.current;
     const data = `id: ${current.sequence}\nevent: snapshot\ndata: ${JSON.stringify(current)}\n\n`;
     for (const client of clients) {
       if (client.writableLength > 256 * 1024) {
@@ -72,7 +67,7 @@ export function createBroadcastServer(options: {
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'none'",
     );
     if (!localRequest(req)) {
-      json(res, 403, { error: "This rehearsal server is loopback only" });
+      json(res, 403, { error: "This broadcast server is loopback only" });
       return;
     }
     const path = new URL(req.url ?? "/", "http://localhost").pathname;
@@ -83,11 +78,11 @@ export function createBroadcastServer(options: {
         return;
       }
       if (req.method === "GET" && path === "/api/programme") {
-        json(res, 200, current);
+        json(res, 200, output.current);
         return;
       }
       if (req.method === "GET" && path === "/api/operator") {
-        json(res, 200, director.operator(current, store.count));
+        json(res, 200, output.operator());
         return;
       }
       if (req.method === "GET" && path === "/api/programme/events") {
@@ -96,6 +91,7 @@ export function createBroadcastServer(options: {
           "Cache-Control": "no-cache, no-transform",
           Connection: "keep-alive",
         });
+        const current = output.current;
         res.write(
           `retry: 1000\nid: ${current.sequence}\nevent: snapshot\ndata: ${JSON.stringify(current)}\n\n`,
         );
@@ -125,7 +121,9 @@ export function createBroadcastServer(options: {
         }
         let input: {
           id?: string;
-          command?: Command;
+          command?: Command | "select-game" | "enter-demo" | "clear-selection";
+          gameId?: string;
+          selectionEpoch?: number;
           epoch?: number;
           revision?: number;
         };
@@ -139,53 +137,22 @@ export function createBroadcastServer(options: {
           !input ||
           typeof input.id !== "string" ||
           !/^[a-zA-Z0-9-]{1,80}$/.test(input.id) ||
-          !commands.includes(input.command!)
+          !Number.isSafeInteger(input.selectionEpoch) || input.selectionEpoch! < 0
         ) {
-          json(res, 400, { error: "Invalid command or command ID" });
+          json(res, 400, { error: "Invalid command ID or selection epoch" });
           return;
         }
-        const prior = store.getCommand(input.id);
-        if (prior) {
-          if (prior.command !== input.command || prior.epoch !== input.epoch) {
-            json(res, 409, {
-              error: "Command ID was already used for another request",
-            });
-            return;
-          }
-          json(res, 200, { duplicate: true, programme: current });
+        const { command, id, selectionEpoch } = input;
+        let duplicate: boolean;
+        if (command === "select-game" || command === "enter-demo" || command === "clear-selection") {
+          duplicate = output.select(id, command, selectionEpoch!, input.gameId);
+        } else if (command && commands.includes(command)) {
+          duplicate = output.cue(id, command, selectionEpoch!, input.epoch, input.revision);
+        } else {
+          json(res, 400, { error: "Unknown command" });
           return;
         }
-        if (
-          input.epoch !== current.game.epoch ||
-          input.revision !== current.game.revision
-        ) {
-          json(res, 409, {
-            error: "Game changed; refresh before issuing this command",
-          });
-          return;
-        }
-        const previous = director.checkpoint();
-        try {
-          const next = director.command(input.command!);
-          store.commitCommand(
-            input.id,
-            input.command!,
-            input.epoch,
-            director.checkpoint(),
-          );
-          current = next;
-        } catch (error) {
-          // A failed durable write must never leak a partially applied command on air.
-          director.restore(previous);
-          json(res, 409, {
-            error: error instanceof Error ? error.message : "Command rejected",
-          });
-          return;
-        }
-        baseMs = current.presentationMs;
-        anchor = now();
-        broadcast();
-        json(res, 200, { duplicate: false, programme: current });
+        json(res, 200, { duplicate, programme: output.current });
         return;
       }
       const assets: Record<string, [string, string]> = {
@@ -214,29 +181,42 @@ export function createBroadcastServer(options: {
       }
       json(res, 404, { error: "Not found" });
     } catch (error) {
+      if (error instanceof CommandError) {
+        json(res, error.status, { error: error.message });
+        return;
+      }
       console.error(error);
       if (!res.headersSent) json(res, 500, { error: "Internal server error" });
       else res.end();
     }
   });
+  let heartbeat = 0;
   const interval = setInterval(() => {
-    refresh();
-    broadcast();
+    const previous = output.current;
+    output.tick();
+    // Keep idle viewers connected without sending ten identical slates a second.
+    if (output.current !== previous || ++heartbeat >= 10) {
+      heartbeat = 0;
+      broadcast();
+    }
   }, 100);
   return {
     server,
     tick: () => {
-      refresh();
+      output.tick();
       broadcast();
-      return current;
+      return output.current;
     },
     close: async () => {
       clearInterval(interval);
-      store.save(director.checkpoint());
+      output.stop();
       for (const client of clients) client.end();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      await new Promise<void>((resolve, reject) => {
+        server.close(error => error ? reject(error) : resolve());
+        // Browsers can still hold speculative connections during navigation or SSE recovery.
+        // Stop accepting connections before closing the remaining sockets on shutdown.
+        server.closeAllConnections();
+      });
       store.close();
     },
   };

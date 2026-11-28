@@ -1,0 +1,148 @@
+{
+  "eventId": "fide-wcc-2026",
+  "eventName": "FIDE World Chess Championship 2026",
+  "timeZone": "Europe/Zurich",
+  "scheduleSource": "https://worldchampionship.fide.com/schedule",
+  "games": [
+    {
+      "id": "game-1",
+      "label": "Game 1",
+      "order": 1,
+      "scheduledStart": "2026-11-24T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "xLgOJ6cb", "chapterId": "j7pdr7s2", "pgnRound": "1.1", "events": ["FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-2",
+      "label": "Game 2",
+      "order": 2,
+      "scheduledStart": "2026-11-25T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "L3j03TZq", "chapterId": "p6HX9bPF", "pgnRound": "2.1", "events": ["FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-3",
+      "label": "Game 3",
+      "order": 3,
+      "scheduledStart": "2026-11-26T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "fnmEB1kH", "chapterId": "RD8sbYw1", "pgnRound": "3.1", "events": ["FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-4",
+      "label": "Game 4",
+      "order": 4,
+      "scheduledStart": "2026-11-28T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "wIwJtPqz", "chapterId": "IriXvwPw", "pgnRound": "4.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-5",
+      "label": "Game 5",
+      "order": 5,
+      "scheduledStart": "2026-11-29T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "ueVpeXxW", "chapterId": "qF0qEop5", "pgnRound": "5.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-6",
+      "label": "Game 6",
+      "order": 6,
+      "scheduledStart": "2026-11-30T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "b0ACq4LF", "chapterId": "q6Dz7E8d", "pgnRound": "6.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-7",
+      "label": "Game 7",
+      "order": 7,
+      "scheduledStart": "2026-12-02T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "OZYNuhhF", "chapterId": "sD9adieq", "pgnRound": "7.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-8",
+      "label": "Game 8",
+      "order": 8,
+      "scheduledStart": "2026-12-03T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "K9grUNXr", "chapterId": "mnKMvPYn", "pgnRound": "8.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-9",
+      "label": "Game 9",
+      "order": 9,
+      "scheduledStart": "2026-12-04T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "gBI5kKDi", "chapterId": "ACwXN5MX", "pgnRound": "9.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-10",
+      "label": "Game 10",
+      "order": 10,
+      "scheduledStart": "2026-12-06T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "NhfhTSep", "chapterId": "nC4lSdLF", "pgnRound": "10.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-11",
+      "label": "Game 11",
+      "order": 11,
+      "scheduledStart": "2026-12-07T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "bAU22Apj", "chapterId": "JCsNRDzc", "pgnRound": "11.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-12",
+      "label": "Game 12",
+      "order": 12,
+      "scheduledStart": "2026-12-08T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "vRbnvNEi", "chapterId": "AiVxfFne", "pgnRound": "12.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-13",
+      "label": "Game 13",
+      "order": 13,
+      "scheduledStart": "2026-12-10T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "black": {"id": "46616543", "name": "Gukesh D"},
+      "binding": {"roundId": "S4C6oJ1k", "chapterId": "KZhwFyVX", "pgnRound": "13.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    },
+    {
+      "id": "game-14",
+      "label": "Game 14",
+      "order": 14,
+      "scheduledStart": "2026-12-11T14:00:00Z",
+      "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "white": {"id": "46616543", "name": "Gukesh D"},
+      "black": {"id": "14205483", "name": "Javokhir Sindarov"},
+      "binding": {"roundId": "MDkKXuQD", "chapterId": "rslBKIa3", "pgnRound": "14.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+    }
+  ]
+}

@@ -10,12 +10,12 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
   const dir = "test-results/provider-screenshots/statistics";
   await mkdir(dir, { recursive: true });
   let snapshot: ProgrammeSnapshot;
+  const sendSnapshot = await programmeStream(page);
   await page.route("**/api/programme", route => route.fulfill({json:snapshot}));
   for (const [panel, atMs] of [["outcomes",20000],["time",38000],["search",58000],["history",156000]] as const) {
     for (const variant of ["typical","missing","long"]) {
       snapshot = new Director().advanceTo(atMs);
       expect(snapshot.panel).toBe(panel);
-      snapshot.sequence = Number.MAX_SAFE_INTEGER;
       if (variant === "missing") {
         if (panel === "outcomes") snapshot = {...new Director().advanceTo(90000), sequence: snapshot.sequence};
         if (panel === "time") snapshot.moveTimes[14].elapsedMs = null;
@@ -28,6 +28,7 @@ test("ordinary panels fit both broadcast sizes with typical, missing and extende
         if (panel === "history") snapshot.history[demo.moves.length].sesse!.pawns = -12.85;
       }
       await page.goto("/programme");
+      await sendSnapshot(snapshot);
       await expect(page.locator(".connection-banner")).toBeHidden();
       for (const height of [1080,720]) {
         await page.setViewportSize({width: height*16/9,height});

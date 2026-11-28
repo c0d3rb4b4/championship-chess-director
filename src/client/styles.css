@@ -384,3 +384,36 @@ p {
 .work p { font-size: 28px; margin: 10px 0; }
 .work p span { float: right; }
 .shares { margin-top: 20px; font-size: 24px; }
+
+/* A verified round summary uses the programme's editorial type, colours and safe area. */
+.round-slate { display: flex; flex-direction: column; padding: 74px 96px; }
+.slate-header { border-bottom: 2px solid #5b5954; padding-bottom: 24px; }
+.slate-header p { font: 700 38px var(--display); }
+.slate-body { flex: 1; display: flex; gap: 72px; align-items: center; }
+.slate-identity { flex: 1 1 0; min-width: 0; }
+.slate-identity h1 { font: 800 150px/.98 var(--display); letter-spacing: -.045em; overflow-wrap: anywhere; }
+.round-slate[data-state="unselected"] h1 { max-width: 1200px; }
+.slate-pairing { display: grid; gap: 4px; margin-top: 46px; }
+.slate-player { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 20px;
+  padding: 22px 28px; background: #282826; color: var(--paper); }
+.slate-player:first-child { color: var(--ink); background: var(--paper); }
+.slate-player span { font: 700 28px var(--display); text-transform: uppercase; }
+.slate-player strong { font: 700 52px/1.1 var(--display); overflow-wrap: anywhere; }
+.slate-record { flex: 0 0 42%; border-top: 8px solid var(--red); padding-top: 26px; }
+.slate-record h2 { font: 750 74px/1.04 var(--display); text-wrap: balance; }
+.slate-record .result-value { font-size: 154px; line-height: 1; }
+.slate-kicker { font: 700 34px var(--display); margin-bottom: 12px; }
+.slate-record dl { margin: 38px 0 0; }
+.slate-record dl > div { border-top: 1px solid var(--rule); padding: 14px 0; display: flex;
+  flex-wrap: wrap; align-items: baseline; gap: 6px 24px; justify-content: space-between; }
+.slate-record dt { color: var(--quiet); font-size: 25px; }
+.slate-record dd { font-size: 31px; font-weight: 600; margin: 0; }
+.slate-footer { border-top: 2px solid var(--rule); padding-top: 20px; font-size: 27px; color: var(--quiet); }
+.round-controls { border-bottom: 1px solid #46433e; padding-bottom: 20px; }
+.round-controls label { display: block; margin: 13px 0 5px; font-size: 14px; }
+.round-controls select { width: 100%; padding: 10px; border: 1px solid #79756f; border-radius: 0;
+  background: #262523; color: #f6f3ed; font: inherit; }
+.round-controls select:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+.choice-detail, .binding-diagnostic { font-size: 14px; line-height: 1.55; color: #c7c2b9; margin: 8px 0; white-space: pre-line; overflow-wrap: anywhere; }
+.round-controls .primary { width: 100%; }
+.selection-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
