@@ -9,6 +9,8 @@ import { createBroadcastServer } from "../../src/server/http.js";
 import type { RealProgramme, RecapPage } from "../../src/shared/types.js";
 import { finalResult, sans, score, startFen } from "../finished-game.js";
 
+// Keep the video recorder first so the transition clips use the full 720p viewport.
+test.use({ trace: { mode: "retain-on-failure", screenshots: false } });
 const directory = "test-results/provider-screenshots";
 test("finished-game rundown, replay and recovery through the shared programme", { tag: "@review-captures" },
     async ({ browser, playwright, channel }) => {

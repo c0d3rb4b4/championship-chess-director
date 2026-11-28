@@ -4,15 +4,17 @@
 
 The browser scenario takes a completed archive and a live game through `/operator`. Two programme windows and the embedded preview follow one release clock over HTTP and SSE. The pictures use an original test position with castling, captures and promotions. The same scenario checks a cold take, a full loop, refresh and restart during replay, switching games, reduced motion, a withdrawn result, a 60-second delayed result and an explicit zero-ply result.
 
+Open the **Provider simulation screenshots** run under [PR #22 checks](https://github.com/c0d3rb4b4/championship-chess-director/pull/22/checks), then download the commit-labelled artifact. The G3 stills are in `g3/`.
+
 | Programme page | 1920 × 1080 | 1280 × 720 |
 |---|---|---|
-| Final result | [1080p](result-1080.jpg) | [720p](result-720.jpg) |
-| Game in numbers | [1080p](numbers-1080.jpg) | [720p](numbers-720.jpg) |
-| Time used | [1080p](time-1080.jpg) | [720p](time-720.jpg) |
-| Evaluation history | [1080p](evaluation-1080.jpg) | [720p](evaluation-720.jpg) |
-| Replay · 2.bxa8=Q | [1080p](replay-1080.jpg) | [720p](replay-720.jpg) |
+| Final result | `result-1080.jpg` | `result-720.jpg` |
+| Game in numbers | `numbers-1080.jpg` | `numbers-720.jpg` |
+| Time used | `time-1080.jpg` | `time-720.jpg` |
+| Evaluation history | `evaluation-1080.jpg` | `evaluation-720.jpg` |
+| Replay · 2.bxa8=Q | `replay-1080.jpg` | `replay-720.jpg` |
 
-[Result to Game in numbers · 720p MP4](result-to-recap-720p.mp4) · [Final replay frame to result · 720p MP4](replay-to-result-720p.mp4)
+The `videos/` folder contains `g3-result-to-recap-720p.mp4` and `g3-replay-to-result-720p.mp4`.
 
 The fixture records three moves and two captures per side. White has 12 seconds over two of three moves and Black has 43 seconds over all three. A missing duration breaks the line. A recorded zero counts as timed. A matching Stockfish observation appears at its actual ply. The Node tests additionally cover two separately scaled series, a final-root-only sample, en passant from a Black-to-move FEN, an obsolete score after a correction, and FEN, SAN, mover and highlighted squares at every replay frame.
 
