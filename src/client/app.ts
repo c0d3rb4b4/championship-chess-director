@@ -1,4 +1,5 @@
 import { pawnEstimate, authorityLabels, lastMoveLabel, realProgramme, roundStates, startLabel } from "./game-day.js";
+import { recapLabels } from "./recap.js";
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
 import { cutProgrammeMotion, interruptPanel, reducedMotion, revealPanel, switchSpotlight } from "./programme-motion.js";
@@ -372,7 +373,8 @@ function renderSelector(): void {
 
 function renderRealOperator(s: RealProgramme): void {
   const game = s.game;
-  setText("#director-scene", game ? `${game.label} · ${roundStates[s.state]}` : roundStates[s.state]);
+  const scene = s.recap ? recapLabels[s.recap.page] : roundStates[s.state];
+  setText("#director-scene", game ? `${game.label} · ${scene}` : scene);
   setText("#bound-event", s.eventName);
   setText("#bound-round", game?.label ?? "No game selected");
   setText("#white-player", game?.white.name ?? "—");
@@ -546,14 +548,16 @@ function accept(s: BroadcastSnapshot): void {
     showMode(s.mode);
   }
   if (operator) {
-    if (newStream || (previous && previous.selectionEpoch !== s.selectionEpoch)) {
+    const selectionChanged = previous && (previous.selectionEpoch !== s.selectionEpoch || previous.mode !== s.mode ||
+      (previous.mode === "REAL" && s.mode === "REAL" && previous.game?.id !== s.game?.id));
+    if (selectionChanged) {
       // Discard a draft based on a superseded on-air selection.
       app.querySelector<HTMLSelectElement>("#round-choice")!.value = s.mode === "REAL" ? s.game?.id ?? "" : "";
-      controls = undefined;
     }
-    // Real snapshot sequence advances only for a new take or authority update;
-    // even a rejected PGN may change the diagnostic while leaving the slate intact.
-    const changed = s.mode === "REAL" || newStream || !previous || previous.selectionEpoch !== s.selectionEpoch;
+    if (newStream || selectionChanged) controls = undefined;
+    // The regular details poll covers operator-only health. A replay tick does not change it.
+    const changed = newStream || !previous || previous.selectionEpoch !== s.selectionEpoch ||
+      (s.mode === "REAL" && previous.mode === "REAL" && previous.state !== s.state);
     if (changed) {
       const diagnostic = app.querySelector<HTMLElement>("#binding-diagnostic")!;
       diagnostic.hidden = true;
@@ -564,13 +568,20 @@ function accept(s: BroadcastSnapshot): void {
   } else if (s.mode === "DEMO") {
     renderProgramme(s);
   } else {
-    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis, s.interrupted, s.summary]);
+    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis, s.interrupted, s.summary, s.recap]);
     if (key !== renderKey) {
       renderKey = key;
       app.innerHTML = realProgramme(s, connected);
       if (previous?.mode === "REAL" && !newStream && connected && !recovering &&
-          previous.selectionEpoch === s.selectionEpoch && previous.position?.actual.fen !== s.position?.actual.fen)
-        app.querySelector(".live-round")?.classList.add("released-move");
+          previous.selectionEpoch === s.selectionEpoch) {
+        const programme = app.querySelector(".live-round");
+        if (previous.position?.actual.fen !== s.position?.actual.fen ||
+            (s.recap?.replay && previous.recap?.replay && previous.recap.replay.ply !== s.recap.replay.ply))
+          programme?.classList.add("released-move");
+        if (s.recap && previous.recap && previous.recap.page !== s.recap.page &&
+            previous.position?.revision === s.position?.revision)
+          programme?.classList.add("recap-enter");
+      }
       resizeProgramme();
     }
   }

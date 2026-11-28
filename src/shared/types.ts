@@ -114,6 +114,8 @@ export interface ReleasedPosition {
   startFen: string;
   revision: number;
   summary: GameSummary & { observedAt: string };
+  opening?: string;
+  elapsed?: MoveTime[];
 }
 
 export interface LiveAnalysis {
@@ -121,6 +123,36 @@ export interface LiveAnalysis {
   depth?: number;
   whiteScore?: string;
   pawns?: number;
+  wdl?: [number, number, number];
+}
+
+export type RecapPage = "result" | "numbers" | "time" | "evaluation" | "replay";
+
+export interface RecapSide {
+  moves: number;
+  captures: number;
+  timedMoves: number;
+  totalMs: number;
+  longest?: { label: string; elapsedMs: number };
+}
+
+export interface RecapSample {
+  label: string;
+  mover?: "w" | "b";
+  elapsedMs?: number;
+  pawns?: number;
+  wdl?: [number, number, number];
+}
+
+export interface FinishedRecap {
+  page: RecapPage;
+  white: RecapSide;
+  black: RecapSide;
+  samples: RecapSample[];
+  opening?: string;
+  matchScore?: { white: number; black: number };
+  next?: { label: string; start: string };
+  replay?: { gameId: string; ply: number; frame: BoardFrame; mover?: "w" | "b" };
 }
 
 export interface RealProgramme {
@@ -135,6 +167,7 @@ export interface RealProgramme {
   position?: ReleasedPosition;
   interrupted?: boolean;
   analysis?: Partial<Record<EngineId, LiveAnalysis>>;
+  recap?: FinishedRecap;
   summary: (GameSummary & { observedAt: string }) | null;
 }
 

@@ -1,9 +1,10 @@
 import type { CatalogueGame } from "../shared/catalogue.js";
-import type { EngineId, LiveAnalysis, RealProgramme, SelectionControls } from "../shared/types.js";
+import type { EngineId, LiveAnalysis, RealProgramme, ReleasedPosition, SelectionControls } from "../shared/types.js";
 import { boardFrame, replay } from "./fixtures.js";
 import { AuthorityHttpError, BindingError, fetchGameRecord, gameSummary } from "./game-summary.js";
 import { followAnalysis, type AnalysisTransport } from "./providers/live-analysis.js";
 import type { AuthorityState, Store } from "./store.js";
+import { Recap } from "./recap.js";
 
 export interface FeedOptions extends AnalysisTransport {
   wallNow?: () => number;
@@ -17,6 +18,8 @@ export class GameFeed {
   lastRead: string | null = null;
   readonly sources = { sesse: "Idle", leela: "Idle" };
   released: Pick<RealProgramme, "position" | "analysis" | "interrupted"> = {};
+  recap?: Recap;
+  private releasedRoot?: number;
   readonly delay: number;
   private readonly lifetime = new AbortController();
   private engines?: AbortController;
@@ -39,6 +42,16 @@ export class GameFeed {
 
   private release(now: number) {
     const eligible = this.store.authorityAt(this.epoch, this.identity, now);
+    if (this.releasedRoot !== eligible?.id) {
+      const position = eligible?.state.position;
+      this.recap = undefined;
+      if (eligible && position?.summary.result) {
+        const finishedAt = eligible.state.finishedAt ?? this.store.finalRelease(this.epoch, this.identity, position) ?? eligible.eligible;
+        this.recap = new Recap(this.game.id, position, finishedAt,
+          this.store.recapJournal(this.epoch, this.identity, eligible.id, finishedAt));
+      }
+      this.releasedRoot = eligible?.id;
+    }
     this.released = eligible ? {
       position: eligible.state.position ?? undefined,
       interrupted: eligible.state.interrupted,
@@ -49,7 +62,7 @@ export class GameFeed {
 
   private accept(state: AuthorityState, raw: string, now: number, eligible: number) {
     const id = this.store.feedEvent(this.epoch, this.identity, "authority", null, now, eligible, raw, state);
-    this.raw = { id, state };
+    this.raw = { id, state, eligible };
     this.engines?.abort();
     this.engines = undefined;
     this.engineValues = {};
@@ -80,12 +93,15 @@ export class GameFeed {
       const old = this.raw?.state.position;
       const summary = gameSummary(decoded);
       const sameMoves = old && JSON.stringify(old.moves) === JSON.stringify(decoded.moves);
-      if (!sameMoves || this.raw?.state.interrupted || old.summary.result !== summary.result) {
+      const sameResult = old?.summary.result === summary.result;
+      const sameFacts = old?.opening === decoded.opening && JSON.stringify(old?.elapsed) === JSON.stringify(decoded.elapsed);
+      if (!sameMoves || this.raw?.state.interrupted || !sameResult || (summary.result && !sameFacts)) {
         const correction = old && (!old.moves.every((san, i) => decoded.moves[i] === san) ||
-          (old.summary.result !== null && old.summary.result !== summary.result));
+          (old.summary.result !== null && (!sameResult || !sameMoves)));
         const actual = boardFrame(replay(decoded.moves, this.game.startFen));
-        const position = { actual, moves: decoded.moves, startFen: this.game.startFen,
+        const position: ReleasedPosition = { actual, moves: decoded.moves, startFen: this.game.startFen,
           revision: (old?.revision ?? 1) + Number(Boolean(correction)),
+          opening: decoded.opening, elapsed: decoded.elapsed,
           summary: { ...summary, observedAt: new Date(now).toISOString() } };
         let eligible = now + this.delay;
         if (!this.raw && summary.result && this.delay) {
@@ -94,7 +110,10 @@ export class GameFeed {
               cached.position.summary.result === summary.result && JSON.stringify(cached.position.moves) === JSON.stringify(decoded.moves))
             eligible = now;
         }
-        this.accept({ position, interrupted: false }, pgn, now, eligible);
+        const finishedAt = summary.result ? (sameMoves && sameResult
+          ? this.raw?.state.finishedAt ?? this.store.finalRelease(this.epoch, this.identity, old) ?? eligible
+          : eligible) : undefined;
+        this.accept({ position, interrupted: false, finishedAt }, pgn, now, eligible);
       }
       this.lastRead = new Date(now).toISOString();
       this.status = "verified";
@@ -118,7 +137,8 @@ export class GameFeed {
       this.failures = Math.min(5, this.failures + 1);
       if (!this.raw?.state.interrupted) {
         const now = this.clock();
-        this.accept({ position: this.raw?.state.position ?? null, interrupted: true }, this.diagnostic, now, now + this.delay);
+        this.accept({ position: this.raw?.state.position ?? null, interrupted: true, finishedAt: this.raw?.state.finishedAt },
+          this.diagnostic, now, now + this.delay);
       }
     } finally {
       this.pollAt = this.clock() + Math.max(retryAfter, Math.min(120_000, (this.options.pollMs ?? 15_000) * 2 ** this.failures));

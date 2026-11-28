@@ -13,6 +13,7 @@ type SelectionOutcome = "applied" | "duplicate" | "conflict" | "stale";
 export interface AuthorityState {
   position: ReleasedPosition | null;
   interrupted: boolean;
+  finishedAt?: number;
 }
 
 export class Store {
@@ -139,9 +140,42 @@ export class Store {
   }
 
   authorityAt(epoch: number, identity: string, cutoff: number) {
-    const row = this.db.prepare(`SELECT id, payload FROM feed_events WHERE epoch = ? AND identity = ?
+    const row = this.db.prepare(`SELECT id, eligible_ms, payload FROM feed_events WHERE epoch = ? AND identity = ?
       AND source = 'authority' AND eligible_ms <= ? ORDER BY id DESC LIMIT 1`).get(epoch, identity, cutoff);
-    return row && { id: Number(row.id), state: JSON.parse(String(row.payload)) as AuthorityState };
+    return row && { id: Number(row.id), eligible: Number(row.eligible_ms), state: JSON.parse(String(row.payload)) as AuthorityState };
+  }
+
+  releasedFinal(identity: string, now: number, delay: number) {
+    const row = this.db.prepare(`SELECT payload FROM feed_events WHERE identity = ? AND source = 'authority'
+      AND received_ms <= ? AND eligible_ms <= ? ORDER BY id DESC LIMIT 1`).get(identity, now - delay, now);
+    if (row) return (JSON.parse(String(row.payload)) as AuthorityState).position?.summary.result;
+  }
+
+  finalRelease(epoch: number, identity: string, position: ReleasedPosition): number | undefined {
+    // Older journals have no finishedAt. Find the earliest release of this
+    // exact result and revision, including when the archive bypassed its delay.
+    const row = this.db.prepare(`SELECT MIN(eligible_ms) AS due FROM feed_events
+      WHERE epoch = ? AND identity = ? AND source = 'authority'
+      AND json_extract(payload, '$.position.revision') = ?
+      AND json_extract(payload, '$.position.summary.result') = ?
+      AND json_extract(payload, '$.position.moves') = ?`).get(epoch, identity, position.revision,
+      position.summary.result, JSON.stringify(position.moves));
+    return row?.due == null ? undefined : Number(row.due);
+  }
+
+  recapJournal(epoch: number, identity: string, finalId: number, finishedAt: number) {
+    const roots = this.db.prepare(`SELECT id, payload FROM feed_events WHERE epoch = ? AND identity = ?
+      AND source = 'authority' AND id <= ? AND eligible_ms <= ? ORDER BY id DESC`)
+      .all(epoch, identity, finalId, finishedAt).map(row => ({ id: Number(row.id),
+        ...JSON.parse(String(row.payload)) as AuthorityState }));
+    const samples = this.db.prepare(`SELECT e.root, e.source, e.payload FROM feed_events e JOIN feed_events a ON a.id = e.root
+      WHERE a.epoch = ? AND a.identity = ? AND a.id <= ? AND e.eligible_ms <= ? AND e.payload != 'null'
+      AND e.eligible_ms < COALESCE((SELECT eligible_ms FROM feed_events n WHERE n.epoch = a.epoch
+        AND n.identity = a.identity AND n.source = 'authority' AND n.id > a.id ORDER BY n.id LIMIT 1), ?)
+      ORDER BY e.id DESC`).all(epoch, identity, finalId, finishedAt, finishedAt + 1).map(row => ({
+        root: Number(row.root), source: row.source as EngineId, analysis: JSON.parse(String(row.payload)) as LiveAnalysis,
+      }));
+    return { roots, samples };
   }
 
   previousFinal(identity: string, epoch: number) {

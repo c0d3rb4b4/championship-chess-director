@@ -55,7 +55,7 @@ export function decodeBoundGame(game: CatalogueGame, body: string) {
     return decodeGame({
       authority: "lichess", gameId: binding.chapterId, event, round: binding.pgnRound,
       whiteId: game.white.id, blackId: game.black.id, startFen: game.startFen, clockConvention: "unknown",
-    }, "lichess", binding.chapterId, pgn);
+    }, "lichess", binding.chapterId, pgn, { verifiedElapsed: binding.elapsedTime === "pgn-emt" });
   } catch {
     throw new BindingError("PGN identity, colours or legal mainline failed verification");
   }
@@ -73,7 +73,8 @@ export function decodeGameSummary(game: CatalogueGame, body: string) {
 export async function fetchGameRecord(game: CatalogueGame, signal: AbortSignal, request = fetch) {
   if (!game.binding) throw new BindingError("Game has no verified Lichess binding");
   const roundId = game.binding.roundId;
-  const url = `https://lichess.org/api/broadcast/round/${roundId}.pgn?clocks=true&comments=false`;
+  const comments = game.binding.elapsedTime === "pgn-emt";
+  const url = `https://lichess.org/api/broadcast/round/${roundId}.pgn?clocks=true&comments=${comments}`;
   const response = await request(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
   if (!response.ok) throw new AuthorityHttpError(response.status);
   const pgn = await response.text();

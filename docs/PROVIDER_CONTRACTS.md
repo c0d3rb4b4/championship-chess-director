@@ -161,6 +161,12 @@ Private SHA-256 digests. Three-feed recording `e438fa980a3bcfe48cd37356e7bfbddb5
 
 Keep deployed recordings private until the relevant redistribution terms are confirmed.
 
+## Finished-game evidence
+
+The recap uses the accepted mainline, a sourced PGN Opening tag when present, and eligible exact-root engine observations recorded during the selection. An analysis at the final root alone cannot produce a historical chart. Leela probabilities remain disabled in the deployed adapter.
+
+A round whose source has verified per-move elapsed-time annotations can set `binding.elapsedTime` to `"pgn-emt"`. This requests PGN comments and reads one `[%emt H:MM:SS]` annotation per mainline position. The checked-in championship bindings leave it unset. Until clock convention and time-control evidence are established, archived `%clk` fields cannot generate production move durations.
+
 ## In-play screenshot simulation
 
 Run `npm ci`, `npx playwright install --with-deps --no-shell chromium`, then `npm run screenshots:providers`. The browser test runs the replay CLI on the synthetic recording in `fixtures/provider-simulation.json` and feeds the decoded states to the programme renderer. The simulation uses ten-minute starting clocks and post-move clock annotations. Packet timestamps establish event order.

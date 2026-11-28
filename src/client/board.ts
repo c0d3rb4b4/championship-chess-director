@@ -43,7 +43,7 @@ function materials(id: string): string {
   </pattern>`;
 }
 
-export function board(frame: BoardFrame, id: "actual" | "analysis"): string {
+export function board(frame: BoardFrame, id: "actual" | "analysis" | "replay"): string {
   let cells = "";
   let highlights = "";
   let coordinates = "";
@@ -75,5 +75,6 @@ export function board(frame: BoardFrame, id: "actual" | "analysis"): string {
     const y = (8 - Number(piece.square[1])) * 100;
     return `<use href="#${id}-${piece.color}${escape(piece.type)}" transform="translate(${x + 4} ${y + 4}) scale(.92)"/>`;
   }).join("");
-  return `<svg class="chessboard" data-testid="${id}-board" data-fen="${escape(frame.fen)}" viewBox="0 0 800 800" role="img" aria-label="${id === "actual" ? "Actual game" : "Hypothetical analysis"} board after ${escape(frame.moveLabel)}"><defs>${materials(id)}${pieceDefinitions(id)}</defs>${cells}${highlights}${pieces}${coordinates}</svg>`;
+  const role = { actual: "Actual game", analysis: "Hypothetical analysis", replay: "Replay" }[id];
+  return `<svg class="chessboard" data-testid="${id}-board" data-fen="${escape(frame.fen)}" viewBox="0 0 800 800" role="img" aria-label="${role} board after ${escape(frame.moveLabel)}"><defs>${materials(id)}${pieceDefinitions(id)}</defs>${cells}${highlights}${pieces}${coordinates}</svg>`;
 }

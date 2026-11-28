@@ -15,7 +15,7 @@ export interface Binding {
 }
 
 export function decodeGame(
-  binding: Binding, authority: string, gameId: string, pgn: string, { inspectClock = false } = {},
+  binding: Binding, authority: string, gameId: string, pgn: string, { inspectClock = false, verifiedElapsed = false } = {},
 ) {
   if (authority !== binding.authority || gameId !== binding.gameId) throw Error("Unbound authority");
   const game = new Chess();
@@ -31,17 +31,34 @@ export function decodeGame(
     return clock ? [{ fen: comment.fen, seconds: clock.seconds }] : [];
   }) : [];
   const clock = inspectClock && moves.length ? parseClock(game.getComment()) : undefined;
+  const elapsed = verifiedElapsed ? elapsedTimes(game) : undefined;
+  const opening = h.Opening?.trim();
   return {
     white: h.White, black: h.Black, clocks, binding: { ...binding }, moves, fen: game.fen(), result,
+    ...(opening && { opening }),
+    ...(elapsed?.length && { elapsed }),
     ...(clock && { clockAnnotation: {
       ...clock, ply: moves.length, san: moves[moves.length - 1], mover: game.turn() === "b" ? "white" : "black",
     } }),
   };
 }
 
+function elapsedTimes(game: Chess) {
+  const comments = new Map(game.getComments().map(({ fen, comment }) => [fen, comment]));
+  return game.history({ verbose: true }).flatMap(({ after, san }, index) => {
+    const annotations = [...(comments.get(after) ?? "").matchAll(/\[%emt\b([^\]]*)\]/g)];
+    const time = annotations.length === 1 && parseTime(annotations[0][1].trim());
+    const elapsedMs = time && Math.round(time.seconds * 1000);
+    return typeof elapsedMs === "number" && Number.isSafeInteger(elapsedMs) ? [{ ply: index + 1, san, elapsedMs }] : [];
+  });
+}
+
 function parseClock(comment = "") {
-  // PGN clock annotations use hours:minutes:seconds, with optional decimals.
-  const match = /\[%clk ((\d+):([0-5]\d):([0-5]\d(?:\.\d+)?))\]/.exec(comment);
+  return parseTime(/\[%clk ([^\]]+)\]/.exec(comment)?.[1] ?? "");
+}
+
+function parseTime(time: string) {
+  const match = /^((\d+):([0-5]\d):([0-5]\d(?:\.\d+)?))$/.exec(time);
   if (!match) return;
   const [, pgnClock, hours, minutes, seconds] = match;
   const totalSeconds = +hours * 3600 + +minutes * 60 + +seconds;

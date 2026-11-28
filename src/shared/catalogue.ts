@@ -10,6 +10,7 @@ export interface RoundBinding {
   pgnRound: string;
   events: string[];
   sessePlayers?: { white: string; black: string };
+  elapsedTime?: "pgn-emt";
 }
 
 export interface CatalogueGame {

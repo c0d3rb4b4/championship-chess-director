@@ -1,5 +1,6 @@
 import type { RealProgramme, SelectionControls } from "../shared/types.js";
 import { board, escape as e } from "./board.js";
+import { finishedPanel } from "./recap.js";
 
 export const roundStates: Record<RealProgramme["state"], string> = {
   buffering: "Filling programme buffer",
@@ -57,6 +58,8 @@ export function pawnEstimate(pawns: number, score: string): string {
 function liveGame(s: RealProgramme, connected: boolean) {
   const game = s.game!, position = s.position!, summary = position.summary;
   const final = summary.result;
+  const recap = s.recap;
+  const playback = recap?.replay;
   const player = (side: "white" | "black") => `<div class="live-player ${side}">
     <span>${side === "white" ? "White" : "Black"}</span>${game[side].country ? `<img class="player-flag" alt="" src="/flags/${game[side].country.toLowerCase()}.svg">` : ""}<strong>${e(game[side].name)}</strong></div>`;
   const [, firstTurn, , , , firstMove] = position.startFen.split(" ");
@@ -73,17 +76,22 @@ function liveGame(s: RealProgramme, connected: boolean) {
       ${a.depth !== undefined ? `<p>Depth <b>${a.depth}</b></p>` : ""}</section>` : "";
   }).join("");
   return `<main class="programme live-round" data-testid="programme" data-scene="${s.state}" data-state="${s.state}"
-      data-game-id="${e(game.id)}" data-revision="${position.revision}">
-    <header class="live-mast"><span>${e(s.eventName)}</span><strong>${final ? "Final result" : "Game in progress"}</strong></header>
-    <div class="live-board-stack">${player("black")}${board(position.actual, "actual")}${player("white")}</div>
+      data-game-id="${e(game.id)}" data-revision="${position.revision}"
+      ${recap ? `data-recap-page="${recap.page}"` : ""}
+      ${playback ? `data-replay-game="${e(playback.gameId)}" data-replay-ply="${playback.ply}"` : ""}>
+    <header class="live-mast"><span>${e(s.eventName)}</span>${playback
+      ? '<strong class="replay-tag">REPLAY</strong>'
+      : `<strong>${final && recap && recap.page !== "result" ? `Final score · ${e(resultLabel(final))}`
+        : final ? "Final result" : "Game in progress"}</strong>`}</header>
+    <div class="live-board-stack">${player("black")}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${player("white")}</div>
     <article class="live-sheet"><h1>${e(game.label)}</h1>
-      <section class="live-lead"><p>${final ? "Final result" : "Last move"}</p>
+      ${recap ? finishedPanel(s, resultLabel, startLabel) : `<section class="live-lead"><p>${final ? "Final result" : "Last move"}</p>
         <h2>${e(final ? resultLabel(final) : lastMoveLabel(summary))}</h2>
         ${final ? `<p>Half-moves recorded <b>${summary.plies}</b></p>`
         : `<p>${summary.fen.split(" ")[1] === "w" ? "White" : "Black"} to move</p>`}</section>
       ${recent ? `<section class="live-notation"><h3>Played moves</h3><ol>${recent}</ol></section>` : ""}
-      ${analysis}
-      ${s.interrupted ? '<p class="authority-gap">Game feed interrupted</p>' : ""}
+      ${analysis}`}
+      ${s.interrupted && !recap ? '<p class="authority-gap">Game feed interrupted</p>' : ""}
     </article><div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED</div></main>`;
 }
 

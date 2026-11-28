@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { BroadcastOperator, BroadcastSnapshot, Command, RealProgramme, SelectionControls } from "../shared/types.js";
+import type { BroadcastOperator, BroadcastSnapshot, Command, FinishedRecap, RealProgramme, SelectionControls } from "../shared/types.js";
 import type { Catalogue, CatalogueGame } from "../shared/catalogue.js";
 import { loadCatalogue, parseCatalogue } from "./catalogue.js";
 import { GameFeed, type FeedOptions } from "./game-feed.js";
 import { Director } from "./director.js";
+import type { Recap } from "./recap.js";
 import type { Selection, Store } from "./store.js";
 
 export type SelectionCommand = "select-game" | "enter-demo" | "clear-selection";
@@ -27,6 +28,7 @@ export class Broadcast {
   private readonly catalogueWarning: string | null;
   private selection: Selection;
   private feed?: GameFeed;
+  private recapMetadata?: { source: Recap; matchScore?: FinishedRecap["matchScore"]; next?: FinishedRecap["next"] };
   private legacySummary: RealProgramme["summary"] = null;
   private sequence = 0;
   private readonly streamId = randomUUID();
@@ -73,6 +75,7 @@ export class Broadcast {
   private activate() {
     this.feed?.stop();
     this.feed = undefined;
+    this.recapMetadata = undefined;
     this.legacySummary = null;
     this.director = undefined;
     if (this.selection.mode === "demo") {
@@ -89,7 +92,7 @@ export class Broadcast {
       // G1 saved a verified summary without a move journal. Preserve its timestamped slate
       // at zero delay until the first full authority read can supply the actual board.
       if (!this.feed.delay) {
-        const { sessePlayers, ...oldBinding } = game.binding;
+        const { sessePlayers, elapsedTime, ...oldBinding } = game.binding;
         const saved = this.store.loadSummary<{ identity: string; summary: RealProgramme["summary"] }>(this.selection.epoch, game.id);
         if (saved?.identity === identity(this.catalogue, { ...game, binding: oldBinding })) this.legacySummary = saved.summary;
       }
@@ -110,14 +113,42 @@ export class Broadcast {
     return "pending";
   }
 
-  private realSnapshot(): RealProgramme {
+  private currentRecap(): FinishedRecap | undefined {
+    const feed = this.feed;
+    const recap = feed?.recap;
+    if (!recap) return;
+    const game = this.game!;
+    if (this.recapMetadata?.source !== recap) {
+      const next = this.catalogue.games.find(round => round.order > game.order);
+      const totals = new Map([[game.white.id, 0], [game.black.id, 0]]);
+      const completedRounds = this.catalogue.games.filter(round => round.order <= game.order);
+      let complete = completedRounds.length === game.order;
+      for (const round of completedRounds) {
+        const result = round.id === game.id ? feed.released.position?.summary.result
+          : this.store.releasedFinal(identity(this.catalogue, round), recap.finishedAt, feed.delay);
+        if (!result || !totals.has(round.white.id) || !totals.has(round.black.id)) {
+          complete = false;
+          break;
+        }
+        totals.set(round.white.id, totals.get(round.white.id)! + (result === "1-0" ? 1 : result === "1/2-1/2" ? .5 : 0));
+        totals.set(round.black.id, totals.get(round.black.id)! + (result === "0-1" ? 1 : result === "1/2-1/2" ? .5 : 0));
+      }
+      this.recapMetadata = { source: recap,
+        ...(complete && { matchScore: { white: totals.get(game.white.id)!, black: totals.get(game.black.id)! } }),
+        ...(next?.scheduledStart && { next: { label: next.label, start: next.scheduledStart } }) };
+    }
+    const { matchScore, next } = this.recapMetadata;
+    return { ...recap.at(this.wallNow()), matchScore, next };
+  }
+
+  private realSnapshot(recap = this.currentRecap()): RealProgramme {
     const game = this.game;
     return {
       mode: "REAL", streamId: this.streamId, sequence: ++this.sequence, selectionEpoch: this.selection.epoch,
       eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone,
       game: game ? { id: game.id, label: game.label, order: game.order, scheduledStart: game.scheduledStart,
         white: game.white, black: game.black } : null,
-      state: this.realState(), ...this.feed?.released, summary: this.feed?.released.position?.summary ?? this.legacySummary,
+      state: this.realState(), ...this.feed?.released, recap, summary: this.feed?.released.position?.summary ?? this.legacySummary,
     };
   }
 
@@ -130,8 +161,13 @@ export class Broadcast {
         this.persistedSecond = second;
       }
       this.current = { ...next, streamId: this.streamId, selectionEpoch: this.selection.epoch, sequence: ++this.sequence };
-    } else if (this.current.mode === "REAL" && (this.feed?.tick() || this.current.state !== this.realState())) {
-      this.current = this.realSnapshot();
+    } else if (this.current.mode === "REAL") {
+      const feedChanged = this.feed?.tick();
+      const recap = this.currentRecap(), previous = this.current.recap;
+      if (feedChanged || this.current.state !== this.realState() ||
+          recap?.page !== previous?.page || recap?.replay?.ply !== previous?.replay?.ply) {
+        this.current = this.realSnapshot(recap);
+      }
     }
     return this.current;
   }
