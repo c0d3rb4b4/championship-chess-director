@@ -108,6 +108,31 @@ ${moves} ${result}`);
         advance(1);
       } else { releasedAt = receivedAt; app.tick(); }
     };
+    // Observe the first painted correct FEN independently of Playwright assertion polling.
+    const observeBoard = (state: string, fen: string) => Promise.all(outputs.map(surface =>
+      surface.evaluate((element, { state, fen }) => {
+        const root = document.documentElement;
+        delete root.dataset.boardPaint;
+        const observer = new MutationObserver(() => {
+          const board = document.querySelector(`[data-state="${state}"] [data-testid="actual-board"]`);
+          if (board?.getAttribute("data-fen") !== fen) return;
+          observer.disconnect();
+          requestAnimationFrame(() => requestAnimationFrame(() => { root.dataset.boardPaint = String(Date.now()); }));
+        });
+        observer.observe(element.parentElement!, { childList: true, subtree: true, attributes: true });
+      }, { state, fen })));
+    const recordPaint = async (folder: string) => {
+      const times = await Promise.all(outputs.map(async surface => {
+        const read = () => surface.evaluate(() => Number(document.documentElement.dataset.boardPaint));
+        await expect.poll(read).toBeGreaterThan(0);
+        return await read() - releasedAt;
+      }));
+      expect(Math.min(...times)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...times), `paint (1080p, 720p, preview) in ms: ${times}`).toBeLessThan(500);
+      await mkdir(`${out}/${folder}`, { recursive: true });
+      await writeFile(`${out}/${folder}/paint-D${seconds}.json`,
+        JSON.stringify({ delaySeconds: seconds, hd: times[0], sd: times[1], preview: times[2] }) + "\n");
+    };
     const poll = () => advance(120_001);
     const shot = async (page: Page, label: string) => {
       const size = page.viewportSize()!;
@@ -126,27 +151,13 @@ ${moves} ${result}`);
     }
     poll();
     const first = ["e4"];
-    // Measure the first painted board on each surface independently of Playwright assertion polling.
-    await Promise.all(outputs.map(surface => surface.evaluate(element => {
-      const observer = new MutationObserver(() => {
-        if (!document.querySelector('[data-state="underway"] [data-testid="actual-board"]')) return;
-        observer.disconnect();
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          document.documentElement.dataset.firstBoardPaint = String(Date.now());
-        }));
-      });
-      observer.observe(element.parentElement!, { childList: true, subtree: true });
-    })));
+    const afterFirst = new Chess();
+    afterFirst.move(first[0]);
+    await observeBoard("underway", afterFirst.fen());
     await respond("1. e4");
     await release(() => after("waiting", []));
     await after("underway", first);
-    const times = await Promise.all(outputs.map(async surface => {
-      await expect.poll(() => surface.evaluate(() => Number(document.documentElement.dataset.firstBoardPaint))).toBeGreaterThan(0);
-      return await surface.evaluate(() => Number(document.documentElement.dataset.firstBoardPaint)) - releasedAt;
-    }));
-    expect(Math.max(...times), `first paint (1080p, 720p, preview) in ms: ${times.join(", ")}`).toBeLessThan(500);
-    await mkdir(`${out}/g2`, { recursive: true });
-    await writeFile(`${out}/g2/paint-D${seconds}.json`, JSON.stringify({ delaySeconds: seconds, hd: times[0], sd: times[1], preview: times[2] }) + "\n");
+    await recordPaint("g2");
     if (!seconds) { await sd.waitForTimeout(800); await sd.screencast.stop(); }
 
     // A legal engine candidate must stay off the actual board and respect its own receipt time.
@@ -184,13 +195,22 @@ ${moves} ${result}`);
       await sd.screencast.start({ path: `${out}/videos/g2-confirmed-result-720p.webm`, size: sd.viewportSize()! });
       await sd.waitForTimeout(700);
     }
+    const finalBoard = new Chess();
+    final.forEach(san => finalBoard.move(san));
+    await observeBoard("finished", finalBoard.fen());
     await respond("1. e4 c5 2. Nf3 Nc6", "1/2-1/2");
     if (seconds) {
       // Restart with the result still in the buffer. All connected windows resnapshot on the same port.
-      await app.close(); app = launch(); await listen(app.server, Number(new URL(base).port));
+      await app.close();
+      await Promise.all(outputs.map(s => expect(s.locator(".connection-banner")).toBeVisible()));
+      app = launch();
+      await listen(app.server, Number(new URL(base).port));
+      // Reconnect inside the buffer window. Release-to-paint samples require connected viewers.
+      await Promise.all(outputs.map(s => expect(s.locator(".connection-banner")).toBeHidden()));
     }
     await release(() => after("underway", fixed, async s => { await expect(s).not.toContainText("½–½"); }));
     await after("finished", final, async s => { await expect(s).toContainText("½–½"); });
+    await recordPaint("g5/result");
     if (!seconds) {
       await sd.waitForTimeout(800);
       await sd.screencast.stop();

@@ -30,7 +30,10 @@ jobs:
             ffmpeg -hide_banner -loglevel error -y -i "$clip" -an -c:v libx264 \
               -preset fast -crf 20 -pix_fmt yuv420p -movflags +faststart "${clip%.webm}.mp4"
           done
+      - name: Verify match-day media and index the rehearsal
+        run: node scripts/match-day-evidence.mjs
       - uses: actions/upload-artifact@v4
+        id: evidence
         with:
           name: provider-screenshots-${{ github.sha }}
           path: |
@@ -38,3 +41,8 @@ jobs:
             !test-results/provider-screenshots/videos/*.webm
           if-no-files-found: error
           retention-days: 30
+      - name: Link review evidence
+        env:
+          ARTIFACT_URL: ${{ steps.evidence.outputs.artifact-url }}
+        run: |
+          echo "Download the [commit-labelled rehearsal artifact]($ARTIFACT_URL) and open MATCH-DAY.md for programme stills, transitions and release times." >> "$GITHUB_STEP_SUMMARY"
