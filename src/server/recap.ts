@@ -1,10 +1,32 @@
-import type { BoardFrame, FinishedRecap, RecapPage, RecapSample, RecapSide, ReleasedPosition } from "../shared/types.js";
+import type { BoardFrame, FinishedRecap, RecapPage, RecapSample, RecapSide, ReleasedPosition, ReplayFrame } from "../shared/types.js";
 import { boardFrame, replay } from "./fixtures.js";
 import type { Store } from "./store.js";
 
 const resultMs = 30_000;
 const plyMs = 2_000;
 const finalFrameMs = 4_000;
+
+export class GameReplay {
+  readonly frames: BoardFrame[] = [];
+  readonly moves;
+
+  constructor(private readonly gameId: string, position: ReleasedPosition) {
+    const game = replay([], position.startFen);
+    this.frames.push(boardFrame(game));
+    this.moves = position.moves.map(san => {
+      const move = game.move(san);
+      this.frames.push(boardFrame(game, move));
+      return move;
+    });
+  }
+
+  get durationMs() { return this.moves.length * plyMs + finalFrameMs; }
+
+  at(elapsedMs: number): ReplayFrame {
+    const ply = Math.min(Math.floor(elapsedMs / plyMs), this.moves.length);
+    return { gameId: this.gameId, ply, frame: this.frames[ply], mover: this.moves[ply - 1]?.color };
+  }
+}
 
 export function commonPlies(a: string[], b: string[]): number {
   let prefix = 0;
@@ -14,30 +36,27 @@ export function commonPlies(a: string[], b: string[]): number {
 
 /** Builds the rundown once for the eligible result. Only its cursor advances on ticks. */
 export class Recap {
-  private readonly frames: BoardFrame[] = [];
+  private readonly playback: GameReplay;
   private readonly pages: { page: RecapPage; ms: number }[] = [{ page: "result", ms: resultMs }];
   private readonly facts: Omit<FinishedRecap, "page" | "replay">;
 
-  constructor(private readonly gameId: string, position: ReleasedPosition, readonly finishedAt: number,
+  constructor(gameId: string, position: ReleasedPosition, readonly finishedAt: number,
       { roots, samples: observations }: ReturnType<Store["recapJournal"]>) {
     const emptySide = (): RecapSide => ({ moves: 0, captures: 0, timedMoves: 0, totalMs: 0 });
     const white = emptySide(), black = emptySide();
-    const game = replay([], position.startFen);
+    this.playback = new GameReplay(gameId, position);
     const samples: RecapSample[] = [{ label: "0" }];
-    this.frames.push(boardFrame(game));
 
     const durations = new Map(position.elapsed?.map(entry => [entry.ply, entry]));
-    for (const [index, san] of position.moves.entries()) {
-      const move = game.move(san);
-      const frame = boardFrame(game, move);
+    for (const [index, move] of this.playback.moves.entries()) {
+      const frame = this.playback.frames[index + 1];
       const side = move.color === "w" ? white : black;
       const sample: RecapSample = { label: frame.moveLabel, mover: move.color };
-      this.frames.push(frame);
       samples.push(sample);
       side.moves++;
       side.captures += Number(Boolean(move.captured));
       const entry = durations.get(index + 1);
-      if (entry?.san !== san || entry.elapsedMs == null) continue;
+      if (entry?.san !== move.san || entry.elapsedMs == null) continue;
       const elapsedMs = entry.elapsedMs;
       sample.elapsedMs = elapsedMs;
       side.timedMoves++;
@@ -75,7 +94,7 @@ export class Recap {
     if (samples.slice(0, -1).some(sample => sample.wdl || sample.pawns !== undefined))
       this.pages.push({ page: "evaluation", ms: 15_000 });
     if (position.moves.length)
-      this.pages.push({ page: "replay", ms: position.moves.length * plyMs + finalFrameMs });
+      this.pages.push({ page: "replay", ms: this.playback.durationMs });
   }
 
   at(now: number): FinishedRecap {
@@ -86,9 +105,7 @@ export class Recap {
         continue;
       }
       if (page !== "replay") return { ...this.facts, page };
-      const ply = Math.min(Math.floor(elapsed / plyMs), this.frames.length - 1);
-      return { ...this.facts, page, replay: { gameId: this.gameId, ply,
-        frame: this.frames[ply], mover: this.facts.samples[ply].mover } };
+      return { ...this.facts, page, replay: this.playback.at(elapsed) };
     }
     throw Error("Invalid recap timeline");
   }

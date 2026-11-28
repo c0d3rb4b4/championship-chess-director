@@ -1,4 +1,6 @@
 import { DEFAULT_POSITION } from "chess.js";
+import { boardFrame, replay } from "./fixtures.js";
+import type { ReleasedPosition } from "../shared/types.js";
 import { decodeGame } from "./providers/game.js";
 import type { CatalogueGame, GameSummary, RoundBinding } from "../shared/catalogue.js";
 
@@ -64,6 +66,13 @@ export function decodeBoundGame(game: CatalogueGame, body: string) {
 export function gameSummary(decoded: ReturnType<typeof decodeBoundGame>): GameSummary {
   return { plies: decoded.moves.length, lastSan: decoded.moves.at(-1) ?? null, fen: decoded.fen,
     result: decoded.result as GameSummary["result"] ?? null };
+}
+
+export function gamePosition(game: CatalogueGame, decoded: ReturnType<typeof decodeBoundGame>,
+    now: number, revision = 1): ReleasedPosition {
+  return { startFen: game.startFen, actual: boardFrame(replay(decoded.moves, game.startFen)),
+    moves: decoded.moves, opening: decoded.opening, elapsed: decoded.elapsed, revision,
+    summary: { ...gameSummary(decoded), observedAt: new Date(now).toISOString() } };
 }
 
 export function decodeGameSummary(game: CatalogueGame, body: string) {

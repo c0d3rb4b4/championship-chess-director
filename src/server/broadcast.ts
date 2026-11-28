@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { BroadcastOperator, BroadcastSnapshot, Command, FinishedRecap, RealProgramme, SelectionControls } from "../shared/types.js";
+import type { BroadcastOperator, BroadcastSnapshot, Command, FinishedRecap, RealProgramme, SelectionControls, WaitingProgramme } from "../shared/types.js";
 import type { Catalogue, CatalogueGame } from "../shared/catalogue.js";
 import { loadCatalogue, parseCatalogue } from "./catalogue.js";
 import { GameFeed, type FeedOptions } from "./game-feed.js";
 import { Director } from "./director.js";
+import { PreviousGame, programmeGame, serialAuthority } from "./previous-game.js";
 import type { Recap } from "./recap.js";
 import type { Selection, Store } from "./store.js";
 
@@ -24,10 +25,14 @@ function identity(catalogue: Catalogue, game: CatalogueGame) {
 
 /** One shared selection and one authority session per take, independent of SSE subscriber count. */
 export class Broadcast {
-  private readonly catalogue: Catalogue;
-  private readonly catalogueWarning: string | null;
+  private catalogue: Catalogue;
+  private catalogueWarning: string | null;
+  private scheduleCheckAt = 0;
   private selection: Selection;
   private feed?: GameFeed;
+  private previousGame?: PreviousGame;
+  private makePreviousGame?: () => PreviousGame;
+  private delay = 0;
   private recapMetadata?: { source: Recap; matchScore?: FinishedRecap["matchScore"]; next?: FinishedRecap["next"] };
   private legacySummary: RealProgramme["summary"] = null;
   private sequence = 0;
@@ -56,7 +61,7 @@ export class Broadcast {
       this.catalogueWarning = "Using the last validated catalogue. " + (error instanceof Error ? error.message : "Configuration unavailable");
     }
     this.catalogue = catalogue;
-    store.saveCatalogue(catalogue);
+    this.saveCatalogue(catalogue, this.wallNow());
     if (options.startInDemo && this.selection.epoch === 0) {
       store.selectGame("startup-demo", 0, "demo", null);
       this.selection = store.loadSelection();
@@ -72,9 +77,48 @@ export class Broadcast {
   private now() { return this.options.now?.() ?? performance.now(); }
   private wallNow() { return (this.options.wallNow ?? Date.now)(); }
 
+  private scheduleKey(game: CatalogueGame) {
+    return JSON.stringify([this.catalogue.eventId, game.id, game.order, game.white.id, game.black.id]);
+  }
+
+  private saveCatalogue(catalogue: Catalogue, now: number) {
+    this.store.saveCatalogue(catalogue, {
+      observedAt: now, games: catalogue.games.map(game => ({ key: this.scheduleKey(game), start: game.scheduledStart })),
+    });
+    this.scheduleCheckAt = now + 1000;
+  }
+
+  private refreshSchedule(now: number) {
+    if (now < this.scheduleCheckAt) return;
+    this.scheduleCheckAt = now + 1000;
+    try {
+      const updated = loadCatalogue(this.options.cataloguePath);
+      if (updated.eventId !== this.catalogue.eventId) throw Error("A different event requires a restart");
+      // Active identities and bindings are pinned. Only the verified schedule is hot-reloaded.
+      const starts = new Map(updated.games.map(game => [game.id, game]));
+      const games = this.catalogue.games.map(game => {
+        const configured = starts.get(game.id);
+        return configured && configured.order === game.order &&
+          configured.white.id === game.white.id && configured.black.id === game.black.id
+          ? { ...game, scheduledStart: configured.scheduledStart } : game;
+      });
+      if (games.some((game, index) => game.scheduledStart !== this.catalogue.games[index].scheduledStart)) {
+        const catalogue = { ...this.catalogue, scheduleSource: updated.scheduleSource, games };
+        this.saveCatalogue(catalogue, now);
+        this.catalogue = catalogue;
+      }
+      this.catalogueWarning = null;
+    } catch (error) {
+      this.catalogueWarning = "Using the last validated schedule. " + (error instanceof Error ? error.message : "Configuration unavailable");
+    }
+  }
+
   private activate() {
     this.feed?.stop();
     this.feed = undefined;
+    this.previousGame?.stop();
+    this.previousGame = undefined;
+    this.makePreviousGame = undefined;
     this.recapMetadata = undefined;
     this.legacySummary = null;
     this.director = undefined;
@@ -87,8 +131,10 @@ export class Broadcast {
       return;
     }
     const game = this.game;
+    const readAuthority = serialAuthority(() => this.wallNow());
+    this.delay = game ? this.store.sessionDelay(this.selection.epoch, this.options.delayMs ?? 0) : 0;
     if (game?.binding) {
-      this.feed = new GameFeed(this.store, this.selection.epoch, identity(this.catalogue, game), game, this.options);
+      this.feed = new GameFeed(this.store, this.selection.epoch, identity(this.catalogue, game), game, { ...this.options, readAuthority });
       // G1 saved a verified summary without a move journal. Preserve its timestamped slate
       // at zero delay until the first full authority read can supply the actual board.
       if (!this.feed.delay) {
@@ -97,11 +143,17 @@ export class Broadcast {
         if (saved?.identity === identity(this.catalogue, { ...game, binding: oldBinding })) this.legacySummary = saved.summary;
       }
     }
-    this.current = this.realSnapshot();
+    if (game) {
+      const candidates = this.catalogue.games.filter(round => round.order < game.order && round.binding).reverse()
+        .map(round => ({ game: round, identity: identity(this.catalogue, round) }));
+      if (candidates.length)
+        this.makePreviousGame = () => new PreviousGame(this.store, this.selection.epoch, this.delay, candidates,
+          () => this.wallNow(), readAuthority, this.options.request);
+    }
+    this.current = this.realSnapshot(this.wallNow());
   }
 
-  private realState(): RealProgramme["state"] {
-    const game = this.game;
+  private realState(game: RealProgramme["game"], presentationTime: number): RealProgramme["state"] {
     if (!game) return "unselected";
     const released = this.feed?.released;
     const summary = released?.position?.summary ?? this.legacySummary;
@@ -109,17 +161,18 @@ export class Broadcast {
     if (summary?.plies) return "underway";
     if (summary && !released?.interrupted) return "waiting";
     if (this.feed?.delay && !summary && !released?.interrupted) return "buffering";
-    if (game.scheduledStart && this.wallNow() - (this.feed?.delay ?? 0) >= Date.parse(game.scheduledStart)) return "unavailable";
+    if (game.scheduledStart && presentationTime >= Date.parse(game.scheduledStart)) return "unavailable";
     return "pending";
   }
 
-  private currentRecap(): FinishedRecap | undefined {
+  private currentRecap(now: number): FinishedRecap | undefined {
     const feed = this.feed;
     const recap = feed?.recap;
     if (!recap) return;
     const game = this.game!;
     if (this.recapMetadata?.source !== recap) {
       const next = this.catalogue.games.find(round => round.order > game.order);
+      const start = next && this.store.scheduledStart(this.scheduleKey(next), recap.finishedAt - this.delay);
       const totals = new Map([[game.white.id, 0], [game.black.id, 0]]);
       const completedRounds = this.catalogue.games.filter(round => round.order <= game.order);
       let complete = completedRounds.length === game.order;
@@ -135,20 +188,43 @@ export class Broadcast {
       }
       this.recapMetadata = { source: recap,
         ...(complete && { matchScore: { white: totals.get(game.white.id)!, black: totals.get(game.black.id)! } }),
-        ...(next?.scheduledStart && { next: { label: next.label, start: next.scheduledStart } }) };
+        ...(next && start && { next: { label: next.label, start } }) };
     }
     const { matchScore, next } = this.recapMetadata;
-    return { ...recap.at(this.wallNow()), matchScore, next };
+    return { ...recap.at(now), matchScore, next };
   }
 
-  private realSnapshot(recap = this.currentRecap()): RealProgramme {
-    const game = this.game;
+  private realSnapshot(now: number, previous?: RealProgramme, feedChanged = false): RealProgramme {
+    const presentationTime = now - this.delay;
+    const selected = this.game;
+    const game = selected ? programmeGame(selected, this.store.scheduledStart(this.scheduleKey(selected), presentationTime)) : null;
+    const state = this.realState(game, presentationTime);
+    const summary = this.feed?.released.position?.summary ?? this.legacySummary;
+    const recap = this.currentRecap(now);
+    let waiting: WaitingProgramme | undefined;
+    if (game && state !== "underway" && state !== "finished") {
+      const remainingSeconds = game.scheduledStart === null ? null
+        : Math.max(0, Math.ceil((Date.parse(game.scheduledStart) - presentationTime) / 1000));
+      this.previousGame ??= this.makePreviousGame?.();
+      const archiveReady = !this.feed || !this.feed.reading;
+      waiting = { remainingSeconds, previous: this.previousGame?.at(now, archiveReady) };
+    } else {
+      // The first released move or result already won this tick. Cancel archive lookups
+      // and never emit a superseded replay frame beside the new actual board.
+      this.previousGame?.stop();
+      this.previousGame = undefined;
+    }
+    const oldArchive = previous?.waiting?.previous, archive = waiting?.previous;
+    if (previous && !feedChanged && previous.state === state && previous.game?.scheduledStart === game?.scheduledStart &&
+        previous.timeZone === this.catalogue.timeZone && previous.recap?.page === recap?.page &&
+        previous.recap?.replay?.ply === recap?.replay?.ply && previous.waiting?.remainingSeconds === waiting?.remainingSeconds &&
+        oldArchive?.game.id === archive?.game.id && oldArchive?.result === archive?.result &&
+        oldArchive?.replay?.ply === archive?.replay?.ply && oldArchive?.replay?.frame.fen === archive?.replay?.frame.fen)
+      return previous;
     return {
       mode: "REAL", streamId: this.streamId, sequence: ++this.sequence, selectionEpoch: this.selection.epoch,
-      eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone,
-      game: game ? { id: game.id, label: game.label, order: game.order, scheduledStart: game.scheduledStart,
-        white: game.white, black: game.black } : null,
-      state: this.realState(), ...this.feed?.released, recap, summary: this.feed?.released.position?.summary ?? this.legacySummary,
+      eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone, game,
+      state, ...this.feed?.released, recap, waiting, summary,
     };
   }
 
@@ -162,12 +238,10 @@ export class Broadcast {
       }
       this.current = { ...next, streamId: this.streamId, selectionEpoch: this.selection.epoch, sequence: ++this.sequence };
     } else if (this.current.mode === "REAL") {
+      const now = this.wallNow();
+      this.refreshSchedule(now);
       const feedChanged = this.feed?.tick();
-      const recap = this.currentRecap(), previous = this.current.recap;
-      if (feedChanged || this.current.state !== this.realState() ||
-          recap?.page !== previous?.page || recap?.replay?.ply !== previous?.replay?.ply) {
-        this.current = this.realSnapshot(recap);
-      }
+      this.current = this.realSnapshot(now, this.current, feedChanged);
     }
     return this.current;
   }
@@ -177,7 +251,7 @@ export class Broadcast {
       catalogue: this.catalogue, selectionEpoch: this.selection.epoch,
       authorityStatus: this.feed?.status ?? (this.game ? "pending-binding" : "idle"),
       ...(this.feed && { feedHealth: { delayMs: this.feed.delay, lastRead: this.feed.lastRead, ...this.feed.sources } }),
-      diagnostic: [this.catalogueWarning, this.feed?.diagnostic].filter(Boolean).join(" ") || null,
+      diagnostic: [this.catalogueWarning, this.feed?.diagnostic, this.previousGame?.diagnostic].filter(Boolean).join(" ") || null,
     };
     if (this.current.mode === "REAL") return { ...controls, programme: this.current };
     return { ...controls, ...this.director!.operator(this.current, this.store.count) };
@@ -228,6 +302,7 @@ export class Broadcast {
 
   stop() {
     this.feed?.stop();
+    this.previousGame?.stop();
     if (this.director) this.store.save(this.director.checkpoint());
   }
 }

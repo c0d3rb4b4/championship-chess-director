@@ -144,6 +144,13 @@ export interface RecapSample {
   wdl?: [number, number, number];
 }
 
+export interface ReplayFrame {
+  gameId: string;
+  ply: number;
+  frame: BoardFrame;
+  mover?: "w" | "b";
+}
+
 export interface FinishedRecap {
   page: RecapPage;
   white: RecapSide;
@@ -152,7 +159,18 @@ export interface FinishedRecap {
   opening?: string;
   matchScore?: { white: number; black: number };
   next?: { label: string; start: string };
-  replay?: { gameId: string; ply: number; frame: BoardFrame; mover?: "w" | "b" };
+  replay?: ReplayFrame;
+}
+
+type ProgrammeGame = Omit<CatalogueGame, "binding" | "startFen">;
+
+export interface WaitingProgramme {
+  remainingSeconds: number | null;
+  previous?: {
+    game: ProgrammeGame;
+    result: NonNullable<GameSummary["result"]>;
+    replay?: ReplayFrame;
+  };
 }
 
 export interface RealProgramme {
@@ -162,12 +180,13 @@ export interface RealProgramme {
   selectionEpoch: number;
   eventName: string;
   timeZone: string;
-  game: Omit<CatalogueGame, "binding" | "startFen"> | null;
+  game: ProgrammeGame | null;
   state: "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable" | "buffering";
   position?: ReleasedPosition;
   interrupted?: boolean;
   analysis?: Partial<Record<EngineId, LiveAnalysis>>;
   recap?: FinishedRecap;
+  waiting?: WaitingProgramme;
   summary: (GameSummary & { observedAt: string }) | null;
 }
 

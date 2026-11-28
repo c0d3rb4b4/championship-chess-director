@@ -1,4 +1,4 @@
-import { pawnEstimate, authorityLabels, lastMoveLabel, realProgramme, roundStates, startLabel } from "./game-day.js";
+import { pawnEstimate, authorityLabels, countdownLabel, lastMoveLabel, realProgramme, roundStates, startLabel, waitingHeadline } from "./game-day.js";
 import { recapLabels } from "./recap.js";
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
@@ -373,7 +373,7 @@ function renderSelector(): void {
 
 function renderRealOperator(s: RealProgramme): void {
   const game = s.game;
-  const scene = s.recap ? recapLabels[s.recap.page] : roundStates[s.state];
+  const scene = s.recap ? recapLabels[s.recap.page] : s.waiting ? waitingHeadline(s) : roundStates[s.state];
   setText("#director-scene", game ? `${game.label} · ${scene}` : scene);
   setText("#bound-event", s.eventName);
   setText("#bound-round", game?.label ?? "No game selected");
@@ -568,7 +568,10 @@ function accept(s: BroadcastSnapshot): void {
   } else if (s.mode === "DEMO") {
     renderProgramme(s);
   } else {
-    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis, s.interrupted, s.summary, s.recap]);
+    const waiting = s.waiting;
+    const showsCountdown = waiting && (waiting.remainingSeconds ?? 0) > 0;
+    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis,
+      s.interrupted, s.summary, s.recap, waiting?.previous, showsCountdown]);
     if (key !== renderKey) {
       renderKey = key;
       app.innerHTML = realProgramme(s, connected);
@@ -578,11 +581,19 @@ function accept(s: BroadcastSnapshot): void {
         if (previous.position?.actual.fen !== s.position?.actual.fen ||
             (s.recap?.replay && previous.recap?.replay && previous.recap.replay.ply !== s.recap.replay.ply))
           programme?.classList.add("released-move");
+        if (previous.waiting && s.state === "underway" && !reducedMotion.matches)
+          programme?.classList.add("opening-take");
+        if (waiting?.previous?.replay && previous.waiting?.previous?.replay?.gameId === waiting.previous.replay.gameId &&
+            previous.waiting.previous.replay.ply !== waiting.previous.replay.ply)
+          app.querySelector(".waiting-replay")?.classList.add("released-move");
         if (s.recap && previous.recap && previous.recap.page !== s.recap.page &&
             previous.position?.revision === s.position?.revision)
           programme?.classList.add("recap-enter");
       }
       resizeProgramme();
+    } else if (showsCountdown && (previous?.mode !== "REAL" || waiting.remainingSeconds !== previous.waiting?.remainingSeconds)) {
+      // Update the clock without replacing the replay board or restarting its move tint.
+      setText(".waiting-clock", countdownLabel(waiting.remainingSeconds!));
     }
   }
 }

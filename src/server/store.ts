@@ -24,7 +24,7 @@ export class Store {
       this.db.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL");
       this.transaction(() => {
         const version = this.db.prepare("PRAGMA user_version").get()!.user_version;
-        if (version === 2) return;
+        if (version === 3) return;
         if (version === 0) {
           // Version zero is either a fresh install or the original rehearsal-only database.
           this.db.exec(`
@@ -47,8 +47,8 @@ export class Store {
             );
             PRAGMA user_version = 1;
           `);
-        } else if (version !== 1) throw new Error(`Unsupported database schema ${version}`);
-        this.db.exec(`
+        } else if (version !== 1 && version !== 2) throw new Error(`Unsupported database schema ${version}`);
+        if (version < 2) this.db.exec(`
           CREATE TABLE feed_sessions (epoch INTEGER PRIMARY KEY, delay_ms INTEGER NOT NULL);
           CREATE TABLE feed_events (
             id INTEGER PRIMARY KEY, epoch INTEGER NOT NULL, identity TEXT NOT NULL, source TEXT NOT NULL,
@@ -57,7 +57,13 @@ export class Store {
           CREATE INDEX feed_release ON feed_events(epoch, identity, eligible_ms, id);
           CREATE INDEX feed_root ON feed_events(root, eligible_ms);
           CREATE INDEX feed_archive ON feed_events(identity, source, id);
-          PRAGMA user_version = 2;
+        `);
+        this.db.exec(`
+          CREATE TABLE schedule_updates (
+            id INTEGER PRIMARY KEY, game TEXT NOT NULL, observed_ms INTEGER, start TEXT
+          );
+          CREATE INDEX schedule_game ON schedule_updates(game, id);
+          PRAGMA user_version = 3;
         `);
       });
     } catch (error) {
@@ -78,13 +84,29 @@ export class Store {
     }
   }
 
-  saveCatalogue<T>(catalogue: T): void {
-    this.db.prepare("INSERT OR REPLACE INTO catalogue (id, payload) VALUES (1, ?)").run(JSON.stringify(catalogue));
+  saveCatalogue<T>(catalogue: T, schedule?: { observedAt: number; games: { key: string; start: string | null }[] }): void {
+    this.transaction(() => {
+      this.db.prepare("INSERT OR REPLACE INTO catalogue (id, payload) VALUES (1, ?)").run(JSON.stringify(catalogue));
+      if (schedule) {
+        const latest = this.db.prepare("SELECT start FROM schedule_updates WHERE game = ? ORDER BY id DESC LIMIT 1");
+        const insert = this.db.prepare("INSERT INTO schedule_updates (game, observed_ms, start) VALUES (?, ?, ?)");
+        for (const { key, start } of schedule.games) {
+          const saved = latest.get(key);
+          if (!saved || saved.start !== start) insert.run(key, saved ? schedule.observedAt : null, start);
+        }
+      }
+    });
   }
 
   loadCatalogue<T>(): T | undefined {
     const row = this.db.prepare("SELECT payload FROM catalogue WHERE id = 1").get();
     return row ? JSON.parse(row.payload as string) as T : undefined;
+  }
+
+  scheduledStart(game: string, presentationTime: number): string | null {
+    const row = this.db.prepare(`SELECT start FROM schedule_updates WHERE game = ?
+      AND (observed_ms IS NULL OR observed_ms <= ?) ORDER BY id DESC LIMIT 1`).get(game, presentationTime);
+    return typeof row?.start === "string" ? row.start : null;
   }
 
   loadSelection(): Selection {
@@ -132,7 +154,7 @@ export class Store {
     return Number(this.db.prepare("SELECT delay_ms FROM feed_sessions WHERE epoch = ?").get(epoch)!.delay_ms);
   }
 
-  feedEvent(epoch: number, identity: string, source: "authority" | EngineId, root: number | null,
+  feedEvent(epoch: number, identity: string, source: "authority" | "archive" | EngineId, root: number | null,
       received: number, eligible: number, raw: string | null, payload: AuthorityState | LiveAnalysis | null) {
     return Number(this.db.prepare(`INSERT INTO feed_events
       (epoch, identity, source, root, received_ms, eligible_ms, raw, payload)
@@ -145,10 +167,17 @@ export class Store {
     return row && { id: Number(row.id), eligible: Number(row.eligible_ms), state: JSON.parse(String(row.payload)) as AuthorityState };
   }
 
+  archiveAt(identity: string, now: number, delay: number, beforeEpoch = Number.MAX_SAFE_INTEGER) {
+    const row = this.db.prepare(`SELECT id, received_ms, eligible_ms, payload FROM feed_events WHERE identity = ?
+      AND source IN ('authority', 'archive') AND epoch < ? AND received_ms <= ? AND eligible_ms <= ?
+      AND json_extract(payload, '$.interrupted') = 0
+      ORDER BY id DESC LIMIT 1`).get(identity, beforeEpoch, now - delay, now);
+    return row && { id: Number(row.id), eligible: Math.max(Number(row.eligible_ms), Number(row.received_ms) + delay),
+      ...JSON.parse(String(row.payload)) as AuthorityState };
+  }
+
   releasedFinal(identity: string, now: number, delay: number) {
-    const row = this.db.prepare(`SELECT payload FROM feed_events WHERE identity = ? AND source = 'authority'
-      AND received_ms <= ? AND eligible_ms <= ? ORDER BY id DESC LIMIT 1`).get(identity, now - delay, now);
-    if (row) return (JSON.parse(String(row.payload)) as AuthorityState).position?.summary.result;
+    return this.archiveAt(identity, now, delay)?.position?.summary.result;
   }
 
   finalRelease(epoch: number, identity: string, position: ReleasedPosition): number | undefined {
@@ -179,11 +208,8 @@ export class Store {
   }
 
   previousFinal(identity: string, epoch: number) {
-    const row = this.db.prepare(`SELECT eligible_ms, payload FROM feed_events WHERE identity = ?
-      AND epoch < ? AND source = 'authority' ORDER BY id DESC LIMIT 1`).get(identity, epoch);
-    if (!row) return;
-    const { position, interrupted } = JSON.parse(String(row.payload)) as AuthorityState;
-    if (position?.summary.result && !interrupted) return { position, eligible: Number(row.eligible_ms) };
+    const record = this.archiveAt(identity, Number.MAX_SAFE_INTEGER, 0, epoch);
+    if (record?.position?.summary.result) return { position: record.position, eligible: record.eligible };
   }
 
   analysisAt(root: number, cutoff: number) {

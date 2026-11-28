@@ -27,6 +27,10 @@ for (const seconds of [0, 60]) test(`selected feed through both viewers and prev
   await writeFile(cataloguePath, JSON.stringify(catalogue));
   const pending: ServerResponse[] = [], analysis: ServerResponse[] = [];
   const server = createServer((req, res) => {
+    if (req.url!.startsWith("/api/broadcast/round/") && !req.url!.includes("wIwJtPqz")) {
+      res.writeHead(404).end();
+      return;
+    }
     const queue = req.url!.startsWith("/analysis.pl") ? analysis : pending;
     queue.push(res);
     res.on("close", () => { const i = queue.indexOf(res); if (i >= 0) queue.splice(i, 1); });

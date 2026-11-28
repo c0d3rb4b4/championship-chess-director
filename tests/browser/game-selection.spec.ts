@@ -112,7 +112,7 @@ test("take Game 4, browse and take Game 3, then reopen the persisted selection",
     await capture(compact, "game-4");
     await selector.selectOption("game-3");
     await sharedState(outputs, "game-4", "waiting");
-    expect(requests).toEqual(["/api/broadcast/round/wIwJtPqz.pgn"]);
+    expect(requests.filter(path => path.includes("wIwJtPqz"))).toHaveLength(1);
     await operator.screenshot({ path: `${evidence}/g1/operator.jpg`, quality: 86, fullPage: true });
 
     await compact.screencast.start({ path: `${evidence}/videos/g1-game-switch-720p.webm`, size: small });
@@ -130,7 +130,8 @@ test("take Game 4, browse and take Game 3, then reopen the persisted selection",
     await capture(compact, "game-3");
     await Promise.all([operator.reload(), hd.reload(), compact.reload()]);
     await sharedState(outputs, "game-3", "finished");
-    expect(requests).toEqual(["/api/broadcast/round/wIwJtPqz.pgn", "/api/broadcast/round/fnmEB1kH.pgn"]);
+    expect(requests.filter(path => path.includes("wIwJtPqz"))).toHaveLength(1);
+    expect(requests.filter(path => path.includes("fnmEB1kH")).length).toBeGreaterThanOrEqual(1);
 
     await app.close();
     corrected = true;
