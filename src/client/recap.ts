@@ -19,6 +19,7 @@ export function finishedPanel(s: RealProgramme, formatResult: (result: string) =
   switch (recap.page) {
     case "result":
       return `<section class="live-lead"><h2>${e(result)}</h2>
+        ${summary.lastSan ? `<p>Last move <b>${e(s.position!.actual.moveLabel.replace("...", "…"))}</b></p>` : ""}
         <p>Half-moves recorded <b>${summary.plies}</b></p></section>
         ${recap.matchScore ? `<div class="recap-detail"><span>Match score through ${e(game.label)}</span>
           <strong>${e(game.white.name)} ${points(recap.matchScore.white)}–${points(recap.matchScore.black)} ${e(game.black.name)}</strong></div>` : ""}
