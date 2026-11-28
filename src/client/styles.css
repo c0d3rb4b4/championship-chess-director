@@ -485,3 +485,31 @@ p {
   .recap-enter .live-sheet { animation: recap-page-in 350ms ease-out both; }
   @keyframes recap-page-in { from { opacity: .2; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 }
+
+/* Game-day waiting layout keeps the archive board and the selected pairing distinct. */
+.pre-game { display: grid; grid-template: 68px 1fr / minmax(0, 1fr); gap: 28px 82px; padding: 32px 78px 44px; }
+.pre-game.with-replay { grid-template-columns: 726px minmax(0, 1fr); }
+.waiting-replay { align-self: center; }
+.waiting-replay-heading { display: flex; align-items: center; gap: 18px; margin-bottom: 14px;
+  font: 700 28px/1.1 var(--display); }
+.waiting-replay .replay-tag { padding: 8px 14px; background: var(--paper); color: var(--ink);
+  font-size: 22px; letter-spacing: .11em; }
+.replay-move { margin-left: auto; color: var(--quiet); font-variant-numeric: tabular-nums; }
+.waiting-replay .chessboard { display: block; width: 100%; aspect-ratio: 1; }
+.waiting-replay .live-player { font-size: 32px; }
+.waiting-details { display: grid; align-items: center; grid-template-columns: 1fr .95fr; gap: 50px 100px; }
+.with-replay .waiting-details { align-content: center; grid-template-columns: minmax(0, 1fr); }
+.waiting-details .slate-identity h1 { font-size: 120px; }
+.with-replay .waiting-details .slate-identity h1 { font-size: 104px; }
+.waiting-details .slate-pairing { margin-top: 30px; }
+.waiting-details .live-player { min-height: 66px; align-items: center; padding: 10px 20px; }
+.pre-game .live-player span { flex: 0 0 92px; white-space: nowrap; }
+.waiting-details .live-player strong { overflow-wrap: anywhere; }
+.waiting-status { border-top: 7px solid var(--red); padding-top: 25px; }
+.waiting-status h2 { font: 750 56px/1.06 var(--display); text-wrap: balance; }
+.waiting-clock { font: 760 146px/.98 var(--display); margin-top: 26px; letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums; }
+.waiting-start, .previous-result { margin-top: 24px; color: var(--quiet); font-size: 28px; }
+@media (prefers-reduced-motion: no-preference) {
+  .opening-take .live-sheet { animation: recap-page-in 350ms ease-out both; }
+}

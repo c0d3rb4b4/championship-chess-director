@@ -1,7 +1,6 @@
 import type { CatalogueGame } from "../shared/catalogue.js";
-import type { EngineId, LiveAnalysis, RealProgramme, ReleasedPosition, SelectionControls } from "../shared/types.js";
-import { boardFrame, replay } from "./fixtures.js";
-import { AuthorityHttpError, BindingError, fetchGameRecord, gameSummary } from "./game-summary.js";
+import type { EngineId, LiveAnalysis, RealProgramme, SelectionControls } from "../shared/types.js";
+import { AuthorityHttpError, BindingError, fetchGameRecord, gamePosition, gameSummary } from "./game-summary.js";
 import { followAnalysis, type AnalysisTransport } from "./providers/live-analysis.js";
 import type { AuthorityState, Store } from "./store.js";
 import { Recap } from "./recap.js";
@@ -10,6 +9,7 @@ export interface FeedOptions extends AnalysisTransport {
   wallNow?: () => number;
   delayMs?: number;
   pollMs?: number;
+  readAuthority?: typeof fetchGameRecord;
 }
 
 export class GameFeed {
@@ -82,12 +82,14 @@ export class GameFeed {
     this.releaseAt = Math.min(this.releaseAt, eligible);
   }
 
+  get reading() { return this.pollAt === Infinity; }
+
   private async poll() {
     this.pollAt = Infinity;
     const signal = this.lifetime.signal;
     let retryAfter = 0;
     try {
-      const { decoded, pgn } = await fetchGameRecord(this.game, signal, this.options.request);
+      const { decoded, pgn } = await (this.options.readAuthority ?? fetchGameRecord)(this.game, signal, this.options.request);
       if (signal.aborted) return;
       const now = this.clock();
       const old = this.raw?.state.position;
@@ -98,11 +100,7 @@ export class GameFeed {
       if (!sameMoves || this.raw?.state.interrupted || !sameResult || (summary.result && !sameFacts)) {
         const correction = old && (!old.moves.every((san, i) => decoded.moves[i] === san) ||
           (old.summary.result !== null && (!sameResult || !sameMoves)));
-        const actual = boardFrame(replay(decoded.moves, this.game.startFen));
-        const position: ReleasedPosition = { actual, moves: decoded.moves, startFen: this.game.startFen,
-          revision: (old?.revision ?? 1) + Number(Boolean(correction)),
-          opening: decoded.opening, elapsed: decoded.elapsed,
-          summary: { ...summary, observedAt: new Date(now).toISOString() } };
+        const position = gamePosition(this.game, decoded, now, (old?.revision ?? 1) + Number(Boolean(correction)));
         let eligible = now + this.delay;
         if (!this.raw && summary.result && this.delay) {
           const cached = this.store.previousFinal(this.identity, this.epoch);

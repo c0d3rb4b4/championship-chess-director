@@ -55,13 +55,17 @@ export function pawnEstimate(pawns: number, score: string): string {
     </div>`;
 }
 
+function livePlayer(game: NonNullable<RealProgramme["game"]>, side: "white" | "black") {
+  const { country, name } = game[side];
+  return `<div class="live-player ${side}"><span>${side === "white" ? "White" : "Black"}</span>${country
+    ? `<img class="player-flag" alt="" src="/flags/${country.toLowerCase()}.svg">` : ""}<strong>${e(name)}</strong></div>`;
+}
+
 function liveGame(s: RealProgramme, connected: boolean) {
   const game = s.game!, position = s.position!, summary = position.summary;
   const final = summary.result;
   const recap = s.recap;
   const playback = recap?.replay;
-  const player = (side: "white" | "black") => `<div class="live-player ${side}">
-    <span>${side === "white" ? "White" : "Black"}</span>${game[side].country ? `<img class="player-flag" alt="" src="/flags/${game[side].country.toLowerCase()}.svg">` : ""}<strong>${e(game[side].name)}</strong></div>`;
   const [, firstTurn, , , , firstMove] = position.startFen.split(" ");
   const start = (Number(firstMove) - 1) * 2 + Number(firstTurn === "b");
   const recent = position.moves.slice(-8).map((san, index, tail) => {
@@ -83,7 +87,7 @@ function liveGame(s: RealProgramme, connected: boolean) {
       ? '<strong class="replay-tag">REPLAY</strong>'
       : `<strong>${final && recap && recap.page !== "result" ? `Final score · ${e(resultLabel(final))}`
         : final ? "Final result" : "Game in progress"}</strong>`}</header>
-    <div class="live-board-stack">${player("black")}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${player("white")}</div>
+    <div class="live-board-stack">${livePlayer(game, "black")}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${livePlayer(game, "white")}</div>
     <article class="live-sheet"><h1>${e(game.label)}</h1>
       ${recap ? finishedPanel(s, resultLabel, startLabel) : `<section class="live-lead"><p>${final ? "Final result" : "Last move"}</p>
         <h2>${e(final ? resultLabel(final) : lastMoveLabel(summary))}</h2>
@@ -95,8 +99,48 @@ function liveGame(s: RealProgramme, connected: boolean) {
     </article><div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED</div></main>`;
 }
 
+export function waitingHeadline(s: RealProgramme): string {
+  const seconds = s.waiting?.remainingSeconds;
+  if (seconds === 0) return s.state === "waiting" ? "Awaiting first move" : "Awaiting game update";
+  return "Waiting for the first move";
+}
+
+export function countdownLabel(seconds: number): string {
+  const clock = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
+  return clock.map(value => String(value).padStart(2, "0")).join(":");
+}
+
+function waitingGame(s: RealProgramme, connected: boolean): string {
+  const game = s.game!, waiting = s.waiting!, previous = waiting.previous, playback = previous?.replay;
+  const seconds = waiting.remainingSeconds;
+  return `<main class="programme pre-game ${playback ? "with-replay" : ""}" data-testid="programme" data-scene="${s.state}"
+      data-state="${s.state}" data-game-id="${e(game.id)}"
+      ${playback ? `data-replay-game="${e(playback.gameId)}" data-replay-ply="${playback.ply}"` : ""}>
+    <header class="live-mast"><span>${e(s.eventName)}</span></header>
+    ${previous && playback ? `<section class="waiting-replay" aria-label="Previous game replay">
+      <div class="waiting-replay-heading"><strong class="replay-tag">REPLAY</strong>
+        <span>${e(previous.game.label)} · ${e(resultLabel(previous.result))}</span>
+        <span class="replay-move">${e(playback.ply ? playback.frame.moveLabel : "Start position")}</span></div>
+      ${livePlayer(previous.game, "black")}${board(playback.frame, "replay")}${livePlayer(previous.game, "white")}
+    </section>` : ""}
+    <section class="waiting-details">
+      <div class="slate-identity">
+        <h1>${e(game.label)}</h1>
+        <div class="slate-pairing">${livePlayer(game, "white")}${livePlayer(game, "black")}</div>
+      </div>
+      <div class="waiting-status">
+        <h2>${waitingHeadline(s)}</h2>
+        ${seconds !== null && seconds > 0 ? `<div class="waiting-clock" role="timer" aria-label="Countdown to the scheduled start">${countdownLabel(seconds)}</div>` : ""}
+        <p class="waiting-start">${game.scheduledStart ? "Scheduled start · " : ""}${e(startLabel(game.scheduledStart, s.timeZone))}</p>
+        ${previous && !playback ? `<p class="previous-result">Previous result · ${e(previous.game.label)} · ${e(resultLabel(previous.result))}</p>` : ""}
+      </div>
+    </section>
+    <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED</div></main>`;
+}
+
 export function realProgramme(s: RealProgramme, connected: boolean): string {
   if (s.position && (s.state === "underway" || s.state === "finished")) return liveGame(s, connected);
+  if (s.waiting && s.game) return waitingGame(s, connected);
   const game = s.game;
   const summary = s.summary;
   const state = roundStates[s.state];

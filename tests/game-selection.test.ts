@@ -228,7 +228,8 @@ test("a published round without its feed binding can go to air and restore durin
     const restored = await host.real();
     assert.deepEqual(restored.game, slate.game);
     assert.equal(restored.selectionEpoch, slate.selectionEpoch);
-    assert.equal(upstream.calls.length, 0);
+    assert.ok(upstream.calls.every(call => /\/fnmEB1kH\.pgn/.test(call.url)));
+    assert.equal(restored.waiting?.previous, undefined);
   } finally {
     await host.app.close();
     await rm(temp, { recursive: true, force: true });
