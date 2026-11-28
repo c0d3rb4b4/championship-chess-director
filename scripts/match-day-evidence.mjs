@@ -35,6 +35,7 @@ function media(file, width, height) {
 for (const [label, stem] of [
   ["Countdown with previous replay", "g4/waiting-ply-2"],
   ["Countdown without predecessor", "g4/game-1-no-predecessor"],
+  ["Released move border and panel timer", "unattended/move-cue"],
   ["Unattended comparison", "unattended/comparison"],
   ["Unattended game in numbers", "unattended/numbers"],
   ["Settled live variation", "unattended/spotlight"],

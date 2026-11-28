@@ -1,7 +1,7 @@
 import { DEFAULT_POSITION } from "chess.js";
 import { boardFrame, replay } from "./fixtures.js";
 import type { ReleasedPosition } from "../shared/types.js";
-import { decodeGame } from "./providers/game.js";
+import { decodeGame, providerFenMatches } from "./providers/game.js";
 import type { CatalogueGame, GameSummary, RoundBinding } from "../shared/catalogue.js";
 
 export class BindingError extends Error {}
@@ -93,4 +93,34 @@ export async function fetchGameRecord(game: CatalogueGame, signal: AbortSignal, 
 
 export async function fetchGameSummary(game: CatalogueGame, signal: AbortSignal, request = fetch) {
   return gameSummary((await fetchGameRecord(game, signal, request)).decoded);
+}
+
+// Lichess exposes the elapsed think in seconds and the last completed clocks in centiseconds.
+// Match the chapter and both anchors independently of the PGN request; a racing response
+// or a differently bound round must never start a cold clock.
+export async function fetchThinkTime(game: CatalogueGame, position: ReleasedPosition, signal: AbortSignal, request = fetch) {
+  const binding = game.binding;
+  if (!binding || !position.clocks || !position.moves.length) return;
+  try {
+    const response = await request(`https://lichess.org/api/broadcast/-/-/${binding.roundId}`,
+      { signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]), headers: { Accept: "application/json" }, cache: "no-store" });
+    if (!response.ok) return;
+    const body = await response.json();
+    if (body.round?.id !== binding.roundId || body.round.ongoing !== true || !Array.isArray(body.games)) return;
+    const matches = body.games.filter((g: { id?: string }) => g?.id === binding.chapterId);
+    if (matches.length !== 1) return;
+    const row = matches[0], board = replay(position.moves, position.startFen);
+    const last = board.history({ verbose: true }).at(-1)!;
+    if (row.status !== "*" || row.lastMove !== last.lan ||
+        !providerFenMatches(row.fen, board.fen(), last.isBigPawn() ? last.san : undefined) ||
+        !Number.isSafeInteger(row.thinkTime) || row.thinkTime < 0 ||
+        !Array.isArray(row.players) || row.players.length !== 2) return;
+    for (const [index, side] of (["white", "black"] as const).entries()) {
+      const player = row.players[index], anchor = position.clocks[side === "white" ? "whiteMs" : "blackMs"];
+      if (anchor === undefined || String(player?.fideId) !== game[side].id || !Number.isSafeInteger(player.clock) ||
+          player.clock < 0 || Math.abs(player.clock * 10 - anchor) >= 1000) return;
+    }
+    const age = Math.max(Number(response.headers.get("age") ?? 0), 0);
+    if (Number.isFinite(age) && age <= 15) return (row.thinkTime + age) * 1000;
+  } catch { /* Optional timing evidence. The accepted PGN continues to air. */ }
 }

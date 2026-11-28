@@ -15,6 +15,7 @@ export interface AuthorityState {
   position: ReleasedPosition | null;
   interrupted: boolean;
   finishedAt?: number;
+  moveAtMs?: number;
 }
 
 export class Store {

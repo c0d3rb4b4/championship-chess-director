@@ -39,6 +39,9 @@ export interface EngineView {
   candidates: Candidate[];
   wdl?: [number, number, number];
 }
+export interface PanelWindow { startMs: number; endMs: number }
+export interface ProgrammeCues { nowMs: number; panel?: PanelWindow; moveAtMs?: number }
+
 export interface Scene {
   kind: "thinking" | "spotlight" | "actual-move";
   instance: string;
@@ -51,6 +54,7 @@ export interface Scene {
 export interface ProgrammeSnapshot {
   sequence: number;
   presentationMs: number;
+  cues?: ProgrammeCues;
   mode: "DEMO";
   connected: boolean;
   game: {
@@ -120,6 +124,7 @@ export interface ReleasedPosition {
   opening?: string;
   clocks?: ClockReading;
   clockRunning?: boolean;
+  clockStartedAt?: number;
   elapsed?: MoveTime[];
 }
 
@@ -149,6 +154,7 @@ export interface LiveProfile {
   pressureMs: number;
 }
 export interface LiveDirection {
+  panelWindow?: PanelWindow;
   panel: LivePanel;
   scene: Scene;
   facts: Pick<FinishedRecap, "white" | "black" | "samples" | "opening">;
@@ -181,6 +187,7 @@ export interface ReplayFrame {
 }
 
 export interface FinishedRecap {
+  panelWindow?: PanelWindow;
   page: RecapPage;
   white: RecapSide;
   black: RecapSide;
@@ -203,6 +210,7 @@ export interface WaitingProgramme {
 }
 
 export interface RealProgramme {
+  cues?: ProgrammeCues;
   mode: "REAL";
   streamId?: string;
   sequence: number;

@@ -24,7 +24,7 @@ export function validateProfile(input: unknown): LiveProfile {
 export class LiveDirector {
   state = {
     key: "", rootAt: 0, recent: [] as number[], quietUntil: 0, ply: 0, revision: 0,
-    panel: "notation" as LivePanel, panelUntil: 0, emphasizeUntil: 0,
+    panel: "notation" as LivePanel, panelSince: 0, panelUntil: 0, emphasizeUntil: 0,
     heldAt: 0, automatic: true, pinned: undefined as LivePanel | undefined, held: false,
     spotlight: undefined as { at: number; until: number; scene: Scene } | undefined,
     lastSource: undefined as EngineId | undefined, nextSpot: 0,
@@ -88,14 +88,14 @@ export class LiveDirector {
       if (s.recent.length === 3) s.quietUntil = feed.rootAt + 45000;
       this.endSpot(feed.rootAt);
       Object.assign(s, { key: this.key, rootAt: feed.rootAt, ply: position.moves.length, revision: position.revision,
-        pinned: undefined, panel: "notation", panelUntil: feed.rootAt + 6000,
+        pinned: undefined, panel: "notation", panelSince: feed.rootAt, panelUntil: feed.rootAt + 6000,
         emphasizeUntil: feed.rootAt + 6000 });
     }
     const clocks = position.clocks && { ...position.clocks };
     if (clocks && position.clockRunning) {
       const running = position.summary.fen.split(" ")[1] === "w" ? "whiteMs" : "blackMs";
       const freezeAt = interrupted ? feed.rootAt : now;
-      if (clocks[running] !== undefined) clocks[running] = Math.max(0, clocks[running] - Math.max(0, freezeAt - s.rootAt));
+      if (clocks[running] !== undefined) clocks[running] = Math.max(0, clocks[running] - Math.max(0, freezeAt - (position.clockStartedAt ?? s.rootAt)));
     }
     const low = Math.min(clocks?.whiteMs ?? Infinity, clocks?.blackMs ?? Infinity);
     const minimum = !!clocks && low <= 60000;
@@ -117,7 +117,8 @@ export class LiveDirector {
     });
     const safe = clocks?.whiteMs !== undefined && clocks.blackMs !== undefined && position.clockRunning === true && !s.held && !interrupted && low > s.profile.pressureMs && now >= s.quietUntil;
     if (s.spotlight && (!safe || !analysis[s.spotlight.scene.source!] || now >= s.spotlight.until)) this.endSpot(now);
-    this.canFeature = safe && !!sources.length && !s.spotlight && now >= s.nextSpot && now - s.rootAt >= s.profile.longThinkMs;
+    const featureAt = Math.max(s.nextSpot, s.quietUntil, (position.clockStartedAt ?? s.rootAt) + s.profile.longThinkMs);
+    this.canFeature = safe && !!sources.length && !s.spotlight && now >= featureAt && !emphasis;
     if (this.canFeature && ((s.automatic && !s.pinned) || this.preferSpot)) {
       const other = sources.find(id => id !== s.lastSource && analysis[id]?.line.join(" ") !== analysis[s.lastSource!]?.line.join(" "));
       const source = other ?? sources[0];
@@ -130,7 +131,7 @@ export class LiveDirector {
     this.preferSpot = false;
     if (s.spotlight) {
       const spot = s.spotlight;
-      return { rootKey: s.key, panel: s.panel, scene: { ...spot.scene, frameIndex: Math.min(spot.scene.frames!.length - 1,
+      return { rootKey: s.key, panel: s.panel, panelWindow: { startMs: spot.at, endMs: spot.until }, scene: { ...spot.scene, frameIndex: Math.min(spot.scene.frames!.length - 1,
         now < spot.at + 2000 ? 0 : 1 + Math.floor((now - spot.at - 2000) / s.profile.plyMs)) }, clocks, facts };
     }
     const basic = panels.has("comparison") ? "comparison" : "notation";
@@ -143,11 +144,17 @@ export class LiveDirector {
       panel = slots[(slots.findIndex(([id]) => id === panel) + 1) % slots.length][0];
     }
     if (panel !== s.panel || this.nextPanel || s.panelUntil <= now) {
-      s.panel = panel; s.panelUntil = now + slots.find(([id]) => id === panel)![1];
+      s.panel = panel; s.panelSince = now; s.panelUntil = now + slots.find(([id]) => id === panel)![1];
     }
     this.nextPanel = false;
     const kind = emphasis ? "actual-move" : "thinking";
-    return { rootKey: s.key, panel, clocks, facts, scene: { kind, title: panel,
+    let panelWindow;
+    if (emphasis && !interrupted) panelWindow = { startMs: s.emphasizeUntil - 6000, endMs: s.emphasizeUntil };
+    else if (s.automatic && !s.pinned && !interrupted && !minimum && slots.length > 1) {
+      const endMs = safe && sources.length && featureAt > now ? Math.min(s.panelUntil, featureAt) : s.panelUntil;
+      panelWindow = { startMs: s.panelSince || endMs - slots.find(([id]) => id === panel)![1], endMs };
+    }
+    return { rootKey: s.key, panel, clocks, facts, panelWindow, scene: { kind, title: panel,
       instance: `${s.key}-${kind}-${panel}` } };
   }
 }

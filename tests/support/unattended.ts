@@ -17,13 +17,21 @@ class Socket extends EventTarget {
 
 // Only the upstream transports and wall clock are replaced. Every output passes through the
 // normal decoder, journal, selector, director, HTTP server and SSE fanout.
-export async function rehearsal(delay: number, feeds: Feeds, pollMs = 1) {
+export async function rehearsal(delay: number, feeds: Feeds, pollMs = 1, coldThinkSeconds?: number) {
   const directory = await mkdtemp(join(tmpdir(), "unattended-"));
   const catalogue = loadCatalogue(), game = catalogue.games[0], binding = game.binding!;
   catalogue.games = [game, { ...catalogue.games[1], binding: null }];
-  if (feeds !== "pgn") {
-    binding.elapsedTime = "pgn-emt"; binding.clockConvention = "post-move";
-    binding.leelaFields = { rootWdl: true, evaluationVisits: true };
+  // Cold-take scenarios use the checked-in classical contracts. Other scenarios
+  // explicitly select which upstream fields exist.
+  if (coldThinkSeconds === undefined) {
+    delete binding.timeControl;
+    delete binding.roundClock;
+    delete binding.clockConvention;
+    delete binding.leelaFields;
+    if (feeds !== "pgn") {
+      binding.elapsedTime = "pgn-emt"; binding.clockConvention = "post-move";
+      binding.leelaFields = { rootWdl: true, evaluationVisits: true };
+    }
   }
   if (feeds === "both" || feeds === "sesse") binding.sessePlayers = { white: "White", black: "Black" };
   const cataloguePath = join(directory, "rounds.json");
@@ -52,6 +60,11 @@ export async function rehearsal(delay: number, feeds: Feeds, pollMs = 1) {
     wallNow: () => now,
     request: async input => {
       const url = new URL(String(input));
+      if (url.pathname === "/api/broadcast/-/-/" + binding.roundId) {
+        return Response.json({round:{id:binding.roundId,ongoing:true}, games:[{id:binding.chapterId,status:"*",
+          lastMove:board.history({verbose:true}).at(-1)?.lan, fen:board.fen(), thinkTime:coldThinkSeconds,
+          players:[game.white,game.black].map(p=>({fideId:p.id,clock:720000}))}]});
+      }
       if (url.pathname.includes("/round/")) return new Response(body, { status });
       const copy = new Chess(board.fen());
       const line = ["Nf3","Nc6","Bb5","a6","Ba4","Nf6","O-O","Be7"];

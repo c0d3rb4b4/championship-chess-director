@@ -10,7 +10,7 @@ import type { LiveAnalysis, ReleasedPosition } from "../src/shared/types.js";
 import { finalResult, sans, score, startFen } from "./finished-game.js";
 
 const mapped = loadCatalogue().games[2];
-const game = { ...mapped, startFen, binding: { ...mapped.binding!, elapsedTime: "pgn-emt" as const } };
+const game = { ...mapped, startFen, binding: { ...mapped.binding!, timeControl: undefined, elapsedTime: "pgn-emt" as const } };
 const finishedAt = 1_000;
 
 function position(moves: string[], done = false, revision = 1): ReleasedPosition {

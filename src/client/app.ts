@@ -1,4 +1,5 @@
 import { pawnEstimate, authorityLabels, countdownLabel, lastMoveLabel, realProgramme, roundStates, startLabel, waitingHeadline } from "./game-day.js";
+import { syncProgrammeCues } from "./programme-cues.js";
 import { bindDirection, directionControls, updateDirection } from "./direction-controls.js";
 import { liveView, livePanel, type BoardProgramme } from "./live-view.js";
 import { recapLabels } from "./recap.js";
@@ -145,7 +146,7 @@ function programme(s: BoardProgramme, support: string): string {
         ${player(s, "w")}
       </div>
       <p class="mini-position" ${spotlight ? "" : "hidden"}>${e(s.actual.moveLabel)}</p></section>
-    ${supportingScene(s, support)}${playedMoves(s)}
+    ${supportingScene(s, support)}<div class="panel-timer" aria-hidden="true" hidden><i></i></div>${playedMoves(s)}
     <div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED · Clocks paused</div></main>`;
 }
 function resizeProgramme(): void {
@@ -546,6 +547,8 @@ function connection(value: boolean): void {
   if (connected === value && latest) return;
   connected = value;
   if (!value) cutProgrammeMotion();
+  // Initial HTTP and SSE snapshots can have the same sequence on a quiet board.
+  if (!operator) syncProgrammeCues(app.querySelector(".programme"), value ? latest?.cues : undefined);
   const banner = app.querySelector<HTMLElement>(".connection-banner");
   if (banner) banner.hidden = value;
   setText(
@@ -622,6 +625,7 @@ function accept(s: BroadcastSnapshot): void {
       setText(".waiting-clock", countdownLabel(waiting.remainingSeconds!));
     }
   }
+  if (!operator) syncProgrammeCues(app.querySelector(".programme"), connected ? s.cues : undefined);
 }
 async function resnapshot(): Promise<void> {
   if (recovering) return;

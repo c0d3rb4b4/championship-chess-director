@@ -8,7 +8,7 @@ import {
   variationFrames,
 } from "./fixtures.js";
 import { FixtureHistory } from "./history.js";
-import { duration, outcomes, selectPanel, workProgress } from "./statistics.js";
+import { duration, outcomes, panelSlot, workProgress } from "./statistics.js";
 import type {
   Panel,
   MoveTime,
@@ -163,7 +163,8 @@ export class Director {
     if (moveTimes.some(m => m.elapsedMs !== null)) eligible.add("time");
     if (history.some(row => row.sesse || row.leela)) eligible.add("history");
     const cycleStart = lastMove ? lastMove.atMs + 6000 : 0;
-    let panel = selectPanel(elapsedMs - cycleStart, eligible);
+    const slot = panelSlot(elapsedMs - cycleStart, eligible);
+    let panel: Panel = slot?.panel ?? "comparison";
     let scene: Scene = {
       kind:
         lastMove && elapsedMs < lastMove.atMs + 6000
@@ -205,8 +206,14 @@ export class Director {
       this.state.lastSignature = signature;
     }
     scene.instance = `${epoch}:1:${moves.length}:${this.state.sceneNumber}`;
+    let window = slot && { startMs: cycleStart + slot.startMs, endMs: cycleStart + slot.endMs };
+    if (scene.kind === "actual-move" && lastMove) window = { startMs: lastMove.atMs, endMs: cycleStart };
+    else if (scene.kind === "spotlight") window = { startMs: demo.spotlightAtMs, endMs: demo.spotlightAtMs + SPOTLIGHT_DURATION_MS };
+    else if (window && !lastMove && !this.state.spotlightSuppressed && elapsedMs < demo.spotlightAtMs)
+      window.endMs = Math.min(window.endMs, demo.spotlightAtMs);
     this.state.sequence++;
     return {
+      cues: { nowMs: elapsedMs, panel: window, moveAtMs: lastMove && elapsedMs < lastMove.atMs + 10000 ? lastMove.atMs : undefined },
       sequence: this.state.sequence,
       presentationMs: elapsedMs,
       mode: "DEMO",

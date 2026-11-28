@@ -104,8 +104,9 @@ export class Recap {
         elapsed -= ms;
         continue;
       }
-      if (page !== "replay") return { ...this.facts, page };
-      return { ...this.facts, page, replay: this.playback.at(elapsed) };
+      const panelWindow = { startMs: now - elapsed, endMs: now - elapsed + ms };
+      if (page !== "replay") return { ...this.facts, page, panelWindow };
+      return { ...this.facts, page, panelWindow, replay: this.playback.at(elapsed) };
     }
     throw Error("Invalid recap timeline");
   }

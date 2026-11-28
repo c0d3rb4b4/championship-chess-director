@@ -292,8 +292,15 @@ export class Broadcast {
       this.previousGame?.stop();
       this.previousGame = undefined;
     }
+    const moveAt = this.feed?.moveAtMs;
+    const moveAtMs = moveAt !== undefined && now < moveAt + 10000 && !this.feed?.released.interrupted ? moveAt : undefined;
+    const panel = live?.panelWindow ?? recap?.panelWindow;
+    const cues = panel || moveAtMs !== undefined ? { nowMs: now, panel, moveAtMs } : undefined;
     const oldArchive = previous?.waiting?.previous, archive = waiting?.previous;
-    if (previous && !feedChanged && previous.live?.scene.instance === live?.scene.instance &&
+    if (previous && !feedChanged && previous.cues?.panel?.startMs === panel?.startMs &&
+        previous.cues?.panel?.endMs === panel?.endMs && previous.cues?.moveAtMs === moveAtMs &&
+        (!cues || Math.floor((previous.cues?.nowMs ?? -1000)/1000) === Math.floor(now/1000)) &&
+        previous.live?.scene.instance === live?.scene.instance &&
         previous.live?.scene.frameIndex === live?.scene.frameIndex &&
         Math.ceil((previous.live?.clocks?.whiteMs ?? 0)/1000) === Math.ceil((live?.clocks?.whiteMs ?? 0)/1000) &&
         Math.ceil((previous.live?.clocks?.blackMs ?? 0)/1000) === Math.ceil((live?.clocks?.blackMs ?? 0)/1000) && previous.state === state && previous.game?.scheduledStart === game?.scheduledStart &&
@@ -305,7 +312,7 @@ export class Broadcast {
     return {
       mode: "REAL", streamId: this.streamId, sequence: ++this.sequence, selectionEpoch: this.selection.epoch,
       eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone, game,
-      state, ...this.feed?.released, live, recap, waiting, summary,
+      state, ...this.feed?.released, cues, live, recap, waiting, summary,
     };
   }
 

@@ -94,3 +94,19 @@ test("transport outage and identity rejection are distinct", async () => {
   await assert.rejects(fetchGameSummary(selected, signal, async () => new Response("", { status: 503 })), /HTTP 503/);
   await assert.rejects(fetchGameSummary(selected, signal, async () => new Response(pgn(other))), BindingError);
 });
+
+test("cold-join clock evidence binds the running side, both anchors and the exact played position", async () => {
+  const { decodeBoundGame, gamePosition, fetchThinkTime } = await import("../src/server/game-summary.js");
+  const decoded = decodeBoundGame(selected, pgn(selected, "1. d4 {[%clk 1:59:48]} d5 {[%clk 1:59:42]} *"));
+  const position = gamePosition(selected, decoded, 0), binding = selected.binding!;
+  assert.deepEqual(position.elapsed?.map(row => row.elapsedMs), [12000, 18000]);
+  const game = { id: binding.chapterId, status: "*", fen: position.actual.fen, lastMove: "d7d5", thinkTime: 94,
+    players: [{ fideId: selected.white.id, clock: 718800 }, { fideId: selected.black.id, clock: 718200 }] };
+  const read = (overrides: Record<string,unknown>, age = "0") => fetchThinkTime(selected, position, new AbortController().signal,
+    async () => Response.json({ round: { id: binding.roundId, ongoing: true }, games: [{...game, ...overrides}] }, {headers:{age}}));
+  assert.equal(await read({}, "2"), 96000);
+  for (const patch of [{status:"1-0"}, {id:"another"}, {fen:selected.startFen}, {lastMove:"d2d4"},
+    {thinkTime:-1}, {players:[...game.players].reverse()}, {players:[game.players[0],{...game.players[1],clock:700000}]}])
+    assert.equal(await read(patch), undefined);
+  assert.equal(await read({}, "900"), undefined);
+});
