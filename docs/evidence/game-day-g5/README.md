@@ -2,7 +2,7 @@
 
 ## Private rehearsal
 
-Use the **Provider simulation screenshots** check on this PR or its merge commit. Download the artifact named for the tested Git SHA and open `MATCH-DAY.md`. It links both sizes of each scene, three silent 720p clips, and the per-viewer timing measurements. The PR check tests GitHub's merge revision. The push check tests the resulting commit on main. Retention is 30 days.
+Use the **Provider simulation screenshots** check under [PR #24 checks](https://github.com/c0d3rb4b4/championship-chess-director/pull/24/checks) or on its merge commit. Download the artifact named for the tested Git SHA and open `MATCH-DAY.md`. It links both sizes of each scene, three silent 720p clips, and the per-viewer timing measurements. The PR check tests GitHub's merge revision. The push check tests the resulting commit on main. Retention is 30 days.
 
 | Acceptance case | Evidence from the deterministic run |
 |---|---|
