@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import type { DirectorState } from "./director.js";
-import type { Command } from "../shared/types.js";
+import type { Command, EngineId, LiveAnalysis, ReleasedPosition } from "../shared/types.js";
 
 export interface Selection {
   mode: "real" | "demo";
@@ -10,6 +10,11 @@ export interface Selection {
 
 type SelectionOutcome = "applied" | "duplicate" | "conflict" | "stale";
 
+export interface AuthorityState {
+  position: ReleasedPosition | null;
+  interrupted: boolean;
+}
+
 export class Store {
   private db: DatabaseSync;
   constructor(path: string) {
@@ -18,28 +23,40 @@ export class Store {
       this.db.exec("PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL");
       this.transaction(() => {
         const version = this.db.prepare("PRAGMA user_version").get()!.user_version;
-        if (version === 1) return;
-        if (version !== 0) throw new Error(`Unsupported database schema ${version}`);
-        // Version zero is either a fresh install or the original rehearsal-only database.
+        if (version === 2) return;
+        if (version === 0) {
+          // Version zero is either a fresh install or the original rehearsal-only database.
+          this.db.exec(`
+            CREATE TABLE IF NOT EXISTS checkpoint (id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS commands (
+              id TEXT PRIMARY KEY, command TEXT NOT NULL, epoch INTEGER NOT NULL, applied_ms INTEGER NOT NULL
+            );
+            ALTER TABLE checkpoint RENAME TO demo_checkpoint;
+            ALTER TABLE commands RENAME TO demo_commands;
+            ALTER TABLE demo_commands ADD COLUMN selection_epoch INTEGER;
+            CREATE TABLE catalogue (id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL);
+            CREATE TABLE active_selection (
+              id INTEGER PRIMARY KEY CHECK (id = 1), mode TEXT NOT NULL CHECK (mode IN ('real','demo')),
+              game_id TEXT, epoch INTEGER NOT NULL, summary TEXT,
+              CHECK (mode = 'real' OR game_id IS NULL)
+            );
+            INSERT INTO active_selection (id, mode, epoch) VALUES (1, 'real', 0);
+            CREATE TABLE selection_commands (
+              id TEXT PRIMARY KEY, expected_epoch INTEGER NOT NULL, mode TEXT NOT NULL, game_id TEXT
+            );
+            PRAGMA user_version = 1;
+          `);
+        } else if (version !== 1) throw new Error(`Unsupported database schema ${version}`);
         this.db.exec(`
-          CREATE TABLE IF NOT EXISTS checkpoint (id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS commands (
-            id TEXT PRIMARY KEY, command TEXT NOT NULL, epoch INTEGER NOT NULL, applied_ms INTEGER NOT NULL
+          CREATE TABLE feed_sessions (epoch INTEGER PRIMARY KEY, delay_ms INTEGER NOT NULL);
+          CREATE TABLE feed_events (
+            id INTEGER PRIMARY KEY, epoch INTEGER NOT NULL, identity TEXT NOT NULL, source TEXT NOT NULL,
+            root INTEGER, received_ms INTEGER NOT NULL, eligible_ms INTEGER NOT NULL, raw TEXT, payload TEXT NOT NULL
           );
-          ALTER TABLE checkpoint RENAME TO demo_checkpoint;
-          ALTER TABLE commands RENAME TO demo_commands;
-          ALTER TABLE demo_commands ADD COLUMN selection_epoch INTEGER;
-          CREATE TABLE catalogue (id INTEGER PRIMARY KEY CHECK (id = 1), payload TEXT NOT NULL);
-          CREATE TABLE active_selection (
-            id INTEGER PRIMARY KEY CHECK (id = 1), mode TEXT NOT NULL CHECK (mode IN ('real','demo')),
-            game_id TEXT, epoch INTEGER NOT NULL, summary TEXT,
-            CHECK (mode = 'real' OR game_id IS NULL)
-          );
-          INSERT INTO active_selection (id, mode, epoch) VALUES (1, 'real', 0);
-          CREATE TABLE selection_commands (
-            id TEXT PRIMARY KEY, expected_epoch INTEGER NOT NULL, mode TEXT NOT NULL, game_id TEXT
-          );
-          PRAGMA user_version = 1;
+          CREATE INDEX feed_release ON feed_events(epoch, identity, eligible_ms, id);
+          CREATE INDEX feed_root ON feed_events(root, eligible_ms);
+          CREATE INDEX feed_archive ON feed_events(identity, source, id);
+          PRAGMA user_version = 2;
         `);
       });
     } catch (error) {
@@ -107,6 +124,45 @@ export class Store {
       SELECT summary FROM active_selection WHERE id = 1 AND mode = 'real' AND epoch = ? AND game_id = ?
     `).get(epoch, gameId);
     return typeof row?.summary === "string" ? JSON.parse(row.summary) as T : undefined;
+  }
+
+  sessionDelay(epoch: number, configured: number): number {
+    this.db.prepare("INSERT OR IGNORE INTO feed_sessions VALUES (?, ?)").run(epoch, configured);
+    return Number(this.db.prepare("SELECT delay_ms FROM feed_sessions WHERE epoch = ?").get(epoch)!.delay_ms);
+  }
+
+  feedEvent(epoch: number, identity: string, source: "authority" | EngineId, root: number | null,
+      received: number, eligible: number, raw: string | null, payload: AuthorityState | LiveAnalysis | null) {
+    return Number(this.db.prepare(`INSERT INTO feed_events
+      (epoch, identity, source, root, received_ms, eligible_ms, raw, payload)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(epoch, identity, source, root, received, eligible, raw, JSON.stringify(payload)).lastInsertRowid);
+  }
+
+  authorityAt(epoch: number, identity: string, cutoff: number) {
+    const row = this.db.prepare(`SELECT id, payload FROM feed_events WHERE epoch = ? AND identity = ?
+      AND source = 'authority' AND eligible_ms <= ? ORDER BY id DESC LIMIT 1`).get(epoch, identity, cutoff);
+    return row && { id: Number(row.id), state: JSON.parse(String(row.payload)) as AuthorityState };
+  }
+
+  previousFinal(identity: string, epoch: number) {
+    const row = this.db.prepare(`SELECT eligible_ms, payload FROM feed_events WHERE identity = ?
+      AND epoch < ? AND source = 'authority' ORDER BY id DESC LIMIT 1`).get(identity, epoch);
+    if (!row) return;
+    const { position, interrupted } = JSON.parse(String(row.payload)) as AuthorityState;
+    if (position?.summary.result && !interrupted) return { position, eligible: Number(row.eligible_ms) };
+  }
+
+  analysisAt(root: number, cutoff: number) {
+    const rows = this.db.prepare(`SELECT source, payload, MAX(id) FROM feed_events
+      WHERE root = ? AND eligible_ms <= ? GROUP BY source`).all(root, cutoff);
+    return Object.fromEntries(rows.filter(row => row.payload !== "null").map(row =>
+      [row.source, JSON.parse(String(row.payload)) as LiveAnalysis]));
+  }
+
+  nextRelease(epoch: number, identity: string, after: number) {
+    const row = this.db.prepare(`SELECT MIN(eligible_ms) AS due FROM feed_events
+      WHERE epoch = ? AND identity = ? AND eligible_ms > ?`).get(epoch, identity, after);
+    return row?.due == null ? Infinity : Number(row.due);
   }
 
   load(): DirectorState | undefined {

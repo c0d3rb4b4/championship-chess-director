@@ -417,3 +417,35 @@ p {
 .choice-detail, .binding-diagnostic { font-size: 14px; line-height: 1.55; color: #c7c2b9; margin: 8px 0; white-space: pre-line; overflow-wrap: anywhere; }
 .round-controls .primary { width: 100%; }
 .selection-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+
+.live-round { padding: 26px 58px 38px; display: grid; grid-template: 68px 1fr / 840px 1fr; gap: 22px 90px; }
+.live-mast { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 2px solid var(--rule); font: 700 38px var(--display); }
+.live-mast strong { font-size: 26px; color: var(--quiet); }
+.live-board-stack { align-self: center; width: 808px; margin: auto; }
+.live-board-stack .chessboard { width: 808px; height: 808px; display: block; }
+.live-player { display: flex; align-items: baseline; gap: 20px; padding: 9px 22px; font: 700 38px/1.1 var(--display); }
+.live-player.black { background: #313230; }
+.live-player.white { background: var(--paper); color: var(--ink); }
+.live-player span { font-size: 23px; text-transform: uppercase; }
+.live-sheet { align-self: center; }
+.live-sheet h1 { font: 700 56px/1 var(--display); }
+.live-lead { margin: 26px 0; border-top: 7px solid var(--red); padding: 22px 0 4px; }
+.live-lead h2 { font: 700 110px/1.12 var(--display); letter-spacing: -.03em; }
+.live-lead p, .live-engine p { color: var(--quiet); font-size: 28px; }
+.live-notation, .live-engine { border-top: 2px solid var(--rule); padding: 18px 0; }
+.live-sheet h3 { font: 700 31px var(--display); }
+.live-notation ol { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; list-style: none; padding: 0; margin: 14px 0 0; }
+.live-notation li { font: 700 37px var(--display); }
+.live-notation li span { font-size: 25px; color: var(--quiet); }
+.live-engine p { font-size: 24px; margin-top: 7px; }
+.live-engine b { margin-left: 12px; color: var(--paper); }
+.authority-gap { border-left: 5px solid var(--red); padding: 10px 16px; font: 700 32px var(--display); }
+@media (prefers-reduced-motion: no-preference) {
+  .released-move [data-last-move-square] { animation: live-move-tint 420ms ease-out; }
+  @keyframes live-move-tint { from { filter: brightness(1.55); } to { filter: brightness(1); } }
+}
+.live-engine .pawn-score { margin: 10px 0; }
+.live-engine .pawn-score span { color: var(--quiet); }
+.live-engine .pawn-bar { border-color: #817e77; }
+.live-player .player-flag { align-self: center; }

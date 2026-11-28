@@ -10,6 +10,7 @@ if (dbPath !== ":memory:") mkdirSync(dirname(dbPath), { recursive: true });
 const app = createBroadcastServer({
   dbPath,
   startInDemo: process.env.START_IN_DEMO === "1",
+  delayMs: Number(process.env.PROGRAMME_DELAY_SECONDS ?? 0) * 1000,
   cataloguePath: process.env.CHAMPIONSHIP_CATALOGUE,
   publicDir: resolve("dist/public"),
 });

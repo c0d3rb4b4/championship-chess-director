@@ -5,7 +5,7 @@ import {
 } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Broadcast, CommandError } from "./broadcast.js";
+import { Broadcast, CommandError, type BroadcastOptions } from "./broadcast.js";
 import { Store } from "./store.js";
 import type { Command } from "../shared/types.js";
 
@@ -18,12 +18,7 @@ const commands: Command[] = [
 export function createBroadcastServer(options: {
   dbPath: string;
   publicDir: string;
-  now?: () => number;
-  wallNow?: () => number;
-  request?: typeof fetch;
-  cataloguePath?: string;
-  startInDemo?: boolean;
-}) {
+} & BroadcastOptions) {
   const store = new Store(options.dbPath);
   const clients = new Set<ServerResponse>();
   let output: Broadcast;

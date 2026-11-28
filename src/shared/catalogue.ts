@@ -1,6 +1,7 @@
 export interface CataloguePlayer {
   id: string;
   name: string;
+  country?: string;
 }
 
 export interface RoundBinding {
@@ -8,6 +9,7 @@ export interface RoundBinding {
   chapterId: string;
   pgnRound: string;
   events: string[];
+  sessePlayers?: { white: string; black: string };
 }
 
 export interface CatalogueGame {
