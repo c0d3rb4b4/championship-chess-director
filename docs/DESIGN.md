@@ -4,7 +4,7 @@ Technical design for the [Live Chess Broadcast Interface PRD v1.3](Live_Chess_Br
 
 ## What belongs on each surface
 
-The standard programme carries the actual game, hypothetical analysis and measured statistics. The director decides when the picture changes. The viewer needs the evidence for the position on screen. The operator needs controls and the reasons an item is ineligible.
+The standard programme carries the actual game, hypothetical analysis and measured statistics. The server is the automatic director. Taking a game once starts unattended coverage. Closing the operator tab must allow the same graphics cycle, long-think spotlights, live-move interruptions and result rundown to continue for every viewer. The viewer needs the evidence for the position on screen. The operator needs controls and the reasons an item is ineligible.
 
 | Surface | Required information | Where the detail belongs |
 |---|---|---|
@@ -12,7 +12,7 @@ The standard programme carries the actual game, hypothetical analysis and measur
 | Operator | Same eligible programme preview, local cues, source health, bound game, active scene, fixture time, command success or rejection. | Keep diagnostics such as the root key, event cursors, adapter error or validation reason outside the capture. |
 | Documentation | Score semantics, timing defaults, recovery procedures, fixture details and test instructions. | Link the control room runbook from the repository; keep paragraphs and rehearsal instructions off the programme. |
 
-Use the [pilot contract](DEMO_SLICE.md) and [phased plan](PHASED_PLAN.md) to distinguish implemented behaviour from target behaviour. The stateful service below is the target architecture. The current server runs a synthetic fixture with a checkpoint and command journal. Live adapters, an arbitrary-delay observation journal, general scene rotation and the final OBS performance gate require additional work.
+The [demo](DEMO_SLICE.md) demonstrates the target in-play graphics and motion. G1–G5 delivered the real selector, authority journal, waiting and finished rundowns. The [unattended programme plan](AUTOMATED_PROGRAMME.md) connects those graphics to eligible live observations and defines acceptance through the normal routes.
 
 ## Runtime and ownership
 

@@ -6,7 +6,9 @@ Start with **Phase 0, the metal board and matching piece set**, to review the ne
 
 For the real-game selector, pre-game countdown and post-game programme, use the [game-day implementation phases and repeatable prompt](GAME_DAY_PLAN.md). That plan tracks the selected-game workflow alongside the broader provider and broadcast milestones below.
 
-## What exists today
+**After G5:** Use the [unattended programme plan and all-development prompt](AUTOMATED_PROGRAMME.md) for remaining M0–M3 engineering. Its checkpoints can proceed using deterministic inputs while a source field or production-host check awaits evidence. The one-phase prompt below is for requests explicitly scoped to an original phase.
+
+## Pilot baseline
 
 | Area | Pilot baseline through `64377bb` | Boundary to carry forward |
 |---|---|---|
@@ -30,7 +32,7 @@ For the real-game selector, pre-game countdown and post-game programme, use the 
 | 5. Generalise direction and operations (M2) | Slices 2 and 4 | Direct a full classical game through normal play, pressure, source failure, result and interval. |
 | 6. Broadcast sign-off (M3) | Phases 0–5 | Reproducible full-game and eight-hour rehearsals, browser and OBS evidence. |
 
-**Progress at this revision.** Phase 0 merged in PR #6. Phase 1 merged in PR #7. Phase 2 merged in PR #8. Phase 3 replays the observed Game 3 result with both engine analyses and exercises in-play recovery using synthetic packets. The deployment recorder can now rehearse and label each recovery during a live capture. The field audit checks clock annotations and Leela visit accounting against a private capture. M0 remains open pending in-play evidence and the remaining calibration and usage checks. Phases 4–6 are planned. PRs #1–3 delivered the fixture pilot, broadcast composition and scorecard. When working a phase, add its PR number and the passing or outstanding exit checks beside its row. Use the merged PR and its evidence to mark a phase complete.
+**Historical progress before G1–G5.** Phase 0 merged in PR #6. Phase 1 merged in PR #7. Phase 2 merged in PR #8. Phase 3 replays the observed Game 3 result with both engine analyses and exercises in-play recovery using synthetic packets. The deployment recorder can now rehearse and label each recovery during a live capture. The field audit checks clock annotations and Leela visit accounting against a private capture. M0 remains open pending in-play evidence and the remaining calibration and usage checks. Phases 4–6 are planned. PRs #1–3 delivered the fixture pilot, broadcast composition and scorecard. When working a phase, add its PR number and the passing or outstanding exit checks beside its row. Use the merged PR and its evidence to mark a phase complete.
 
 Deliver one selected phase per pull request. Use the numbered steps within that branch as implementation and verification checkpoints. Preserve one working programme at each merge. The core gates have distinct owners in code: adapters establish field meanings, the server decides what is eligible, and the browser renders the released snapshot.
 

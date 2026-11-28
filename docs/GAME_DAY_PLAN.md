@@ -100,7 +100,7 @@ Keep CI deterministic and use redistributable test inputs. Keep private captures
 
 ## Repeatable prompt
 
-Paste this into a fresh project chat after the plan PR merges. Reuse it after each implementation PR merges.
+G1–G5 are merged. For all remaining development, use the [unattended live programme prompt](AUTOMATED_PROGRAMME.md#one-prompt-for-all-remaining-development). The earlier prompt below is retained for the G1–G5 workflow.
 
 ```text
 @GitHub Use c0d3rb4b4/championship-chess-director. Implement exactly one phase from docs/GAME_DAY_PLAN.md. NEXT is the lowest-numbered unfinished G1–G5 phase whose prerequisites are merged on current main. Inspect the phase table, merged and open PRs, repo instructions, linked PRD, design, provider contracts and relevant source/tests. If a PR already implements NEXT, resume its branch, or return its link if ready for review. If all five phases are merged, report completion and any outstanding broadcast sign-off.

@@ -34,6 +34,8 @@ SQLite stores the selection, receipt and release times, accepted mainlines and r
 
 Before play, the selected pairing and countdown share the programme with the latest earlier completed round whose score is eligible. At zero, the programme waits for a verified first move. A round without a playable predecessor keeps the static waiting layout. A confirmed first move or result takes over on the same timeline used by the operator preview and OBS.
 
+The target live programme runs unattended after one game selection. At the G5 revision, in-play graphics rotation and automatic engine spotlights still run only in demo. The remaining work and [one prompt to implement it](docs/AUTOMATED_PROGRAMME.md#one-prompt-for-all-remaining-development) cover the real programme.
+
 ## Match-day runbook
 
 1. For a private rehearsal, start a separate local instance with its own database and port. For example, run `PORT=3100 BROADCAST_DB=data/rehearsal.sqlite npm run dev`. Open that port's `/operator` and `/programme`. For a public take, first confirm the source permissions, required delay and production-host checks in the [release record](docs/evidence/game-day-g5/README.md#public-broadcast-readiness).
