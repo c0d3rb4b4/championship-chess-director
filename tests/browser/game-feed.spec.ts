@@ -169,7 +169,9 @@ ${moves} ${result}`);
     }));
     await expect.poll(() => journal.prepare("SELECT count(*) AS n FROM feed_events WHERE source='sesse'").get()!.n).toBe(1);
     await release(() => after("underway", first, async s => { await expect(s).not.toContainText("Stockfish"); }));
-    await after("underway", first, async s => { await expect(s).toContainText("c5 Nf3"); });
+    // A released candidate becomes visible on its scheduled panel after move emphasis.
+    for (let i = 0; (await snapshot()).live?.panel !== "comparison" && i < 100; i++) advance(1000);
+    await after("underway", first, async s => { await expect(s.locator(".sesse tbody th")).toHaveText("c5"); await expect(s.locator(".sesse tbody")).toContainText("Nf3"); });
     await Promise.all([hd.reload(), sd.reload()]);
     await after("underway", first);
     if (!seconds) await Promise.all([shot(hd, "live"), shot(sd, "live")]);

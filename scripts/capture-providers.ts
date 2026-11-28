@@ -229,10 +229,11 @@ async function main() {
   const reconnects = new Set<Source>();
   const input = values.interactive ? createInterface({ input: process.stdin, terminal: false }) : undefined;
   if (input) {
-    const commands = "Commands: reconnect authority | reconnect sesse | reconnect leela";
+    const commands = "Commands: reconnect authority | reconnect sesse | reconnect leela | stop";
     console.error(commands);
     input.on("line", line => {
       const [command, source, ...extra] = line.trim().split(/\s+/);
+      if (command === "stop" && !source && !extra.length) { stop.abort(); return; }
       if (command === "reconnect" && !extra.length && (source === "authority" || source === "sesse" || source === "leela")) {
         reconnects.add(source);
         console.error(`Queued ${source} reconnect`);

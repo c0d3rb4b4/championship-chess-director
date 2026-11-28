@@ -82,7 +82,7 @@ test("Leela follows the bound chapter, colours, ply and FEN and discards the old
     assert.deepEqual(feed.released.analysis, {});
     const old = frame(feed.released.position!.actual.fen);
     first.frame(old); feed.tick();
-    assert.deepEqual(feed.released.analysis?.leela, { line: ["c5", "Nf3"] });
+    assert.deepEqual(feed.released.analysis?.leela, { line: ["c5", "Nf3"], historyVerified: true });
     moves = "1. d4"; now += 15_000; feed.tick(); await setImmediate(); feed.tick();
     assert.equal(sockets.length, 2);
     first.frame(old); feed.tick();

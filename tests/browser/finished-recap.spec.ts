@@ -135,10 +135,11 @@ test("match-day rehearsal from countdown through replay, including cold selectio
     tick(now + 15_000);
     const pendingAt = now;
     await Promise.all(view.map(output => expect(output).toHaveAttribute("data-state", "underway")));
+    tick(pendingAt + 6000); // The move holds the board before the first comparison.
     await expect(view[0].getByText("White eval · pawns")).toBeVisible();
     const sourceRoot = await snapshot();
     expect(sourceRoot.position?.moves).toEqual(["O-O-O"]);
-    tick(pendingAt + 50);
+    tick(pendingAt + 6050);
     livePly = sans.length; liveResult = finalResult;
     tick(pendingAt + 15_000);
     const finishedAt = now;

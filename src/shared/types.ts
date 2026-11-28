@@ -33,6 +33,7 @@ export interface EngineView {
   work?: number;
   workUnit?: "nodes" | "visits";
   workDelta?: number;
+  workCandidate?: string;
   visitShares?: { san: string; percent: number }[];
   conditionalSan?: string;
   candidates: Candidate[];
@@ -108,6 +109,8 @@ export interface HistoryRow {
 
 import type { Catalogue, CatalogueGame, GameSummary } from "./catalogue.js";
 
+export interface ClockReading { whiteMs?: number; blackMs?: number }
+
 export interface ReleasedPosition {
   actual: BoardFrame;
   moves: string[];
@@ -115,17 +118,43 @@ export interface ReleasedPosition {
   revision: number;
   summary: GameSummary & { observedAt: string };
   opening?: string;
+  clocks?: ClockReading;
+  clockRunning?: boolean;
   elapsed?: MoveTime[];
 }
 
 export interface LiveAnalysis {
   line: string[];
+  candidates?: Candidate[];
+  work?: number;
+  progress?: { firstAt: number; count: number; delta?: number; ready: boolean };
+  visitShares?: EngineView["visitShares"];
+  historyVerified?: boolean;
   depth?: number;
   whiteScore?: string;
   pawns?: number;
   wdl?: [number, number, number];
 }
 
+export type LivePanel = Panel | "notation" | "numbers";
+export interface LiveProfile {
+  version: 1;
+  panels: [LivePanel, number][];
+  settleMs: number;
+  provisionalMs: number;
+  longThinkMs: number;
+  cooldownMs: number;
+  maxPlies: number;
+  plyMs: number;
+  pressureMs: number;
+}
+export interface LiveDirection {
+  panel: LivePanel;
+  scene: Scene;
+  facts: Pick<FinishedRecap, "white" | "black" | "samples" | "opening">;
+  clocks?: ClockReading;
+  rootKey: string;
+}
 export type RecapPage = "result" | "numbers" | "time" | "evaluation" | "replay";
 
 export interface RecapSide {
@@ -181,10 +210,11 @@ export interface RealProgramme {
   eventName: string;
   timeZone: string;
   game: ProgrammeGame | null;
-  state: "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable" | "buffering";
+  state: "hold" | "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable" | "buffering";
   position?: ReleasedPosition;
   interrupted?: boolean;
   analysis?: Partial<Record<EngineId, LiveAnalysis>>;
+  live?: LiveDirection;
   recap?: FinishedRecap;
   waiting?: WaitingProgramme;
   summary: (GameSummary & { observedAt: string }) | null;
@@ -195,6 +225,7 @@ export type BroadcastSnapshot = RealProgramme | (ProgrammeSnapshot & { selection
 export interface SelectionControls {
   selectionEpoch: number;
   catalogue: Catalogue;
+  direction?: { profile: LiveProfile; held: boolean; automatic: boolean; pinned?: LivePanel };
   feedHealth?: { delayMs: number; lastRead: string | null; sesse: string; leela: string };
   authorityStatus: "idle" | "pending-binding" | "loading" | "verified" | "mismatch" | "unavailable";
   diagnostic: string | null;

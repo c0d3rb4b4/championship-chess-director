@@ -1,6 +1,6 @@
 # Phase 3 provider replay
 
-M0 is open for in-play updates and field verification. Use the [deployment recorder](#record-a-deployed-round) to collect those observations. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
+Game 4 now has private in-play samples on two shared roots and recovery for all three transports. Clock convention, Leela calibration and partial-field verification remain open. [Game 4 private capture report](evidence/unattended/README.md#deployed-game-4-observations--28-november-2026-utc) Use the [deployment recorder](#record-a-deployed-round) to collect those observations. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
 
 At the initial offline checkpoint on 26 November 2026 the deployment endpoints could not be reached for a packet capture from the development host. No event PGN endpoint or verified event-to-provider game mapping was configured. The checked-in example is original synthetic data. At that checkpoint the production event, round, deployed revisions, capture dates and redistribution permissions were unverified.
 
@@ -61,7 +61,7 @@ node --import tsx scripts/replay-providers.mjs data/game-4-capture.json > data/g
 cmp data/game-4-replay.jsonl data/game-4-replay-repeat.jsonl
 ```
 
-The duration is in seconds. Ctrl-C finalises the recording early. The recorder creates a new file with owner-only permissions. Keep provider payloads under the ignored `data/` directory until redistribution terms are verified. The file preserves the PGN clock comments, Sesse versions and Leela subscription generations. Provider failures appear on stderr. A Sesse read the decoder rejects is followed by a fresh snapshot request.
+The duration is in seconds. In interactive mode, type `stop` to finalise the recording early. The recorder creates a new file with owner-only permissions. Keep provider payloads under the ignored `data/` directory until redistribution terms are verified. The file preserves the PGN clock comments, Sesse versions and Leela subscription generations. Provider failures appear on stderr. A Sesse read the decoder rejects is followed by a fresh snapshot request.
 
 ### Rehearse a disconnect during the recording
 

@@ -10,7 +10,7 @@ permissions:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,6 +20,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps --no-shell chromium
       - run: npm run screenshots:providers
+      - run: npm run test:endurance
       - name: Encode 720p review clips as MP4
         run: |
           if ! command -v ffmpeg > /dev/null; then

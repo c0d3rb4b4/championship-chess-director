@@ -1,4 +1,4 @@
-import { count, line, list, object, type Game } from "./game.js";
+import { count, line, list, object, providerFenMatches, wirePositions, type Game } from "./game.js";
 
 // JSON-delta stanzas are [path, replacement] or [path] (deletion).
 function patch(document: unknown, delta: unknown[]) {
@@ -47,13 +47,13 @@ function searchCount(value: unknown) {
   return count(typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value);
 }
 
-function decode(raw: unknown, game: Game) {
+function decode(raw: unknown, game: Game, doublePush?: string) {
   const data = object(raw), position = object(data.position);
   if (!game.white || !game.black || game.white === "?" || game.black === "?" ||
       position.player_w !== (game.binding.sessePlayers?.white ?? game.white) ||
       position.player_b !== (game.binding.sessePlayers?.black ?? game.black))
     throw Error("Unbound Sesse players");
-  if (position.fen !== game.fen || JSON.stringify(position.history) !== JSON.stringify(game.moves))
+  if (!providerFenMatches(position.fen, game.fen, doublePush) || JSON.stringify(position.history) !== JSON.stringify(game.moves))
     return;
   const candidate = (entry: Record<string, unknown>) => ({
     pv: line(game, list(entry.pv)), depth: searchCount(entry.depth), score: score(entry.score)
@@ -71,9 +71,11 @@ export class SesseReplay {
   private version?: string;
   lastWorkMs?: number;
   private fingerprint?: string;
-  constructor(private game: Game) {}
+  private doublePush?: string;
+  constructor(private game: Game) { this.setGame(game); }
   setGame(game: Game) {
     this.game = game;
+    this.doublePush = wirePositions(game).at(-1)?.doublePush;
     this.fingerprint = this.lastWorkMs = undefined;
   }
   disconnect() {
@@ -86,7 +88,7 @@ export class SesseReplay {
       if (delta && !duplicate && (this.version === undefined || base !== this.version))
         throw new SesseFullSnapshotRequired("Full snapshot required");
       const raw = duplicate ? this.raw : delta ? patch(this.raw, body) : structuredClone(body);
-      const observation = decode(raw, this.game);
+      const observation = decode(raw, this.game, this.doublePush);
       this.raw = raw;
       this.version = version;
       if (observation) {

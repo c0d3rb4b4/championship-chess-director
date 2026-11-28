@@ -1,4 +1,6 @@
 import { pawnEstimate, authorityLabels, countdownLabel, lastMoveLabel, realProgramme, roundStates, startLabel, waitingHeadline } from "./game-day.js";
+import { bindDirection, directionControls, updateDirection } from "./direction-controls.js";
+import { liveView, livePanel, type BoardProgramme } from "./live-view.js";
 import { recapLabels } from "./recap.js";
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
@@ -27,18 +29,19 @@ let pending = false;
 let connected = false;
 let recovering = false;
 
-function clock(ms: number): string {
+function clock(ms?: number): string {
+  if (ms === undefined) return "—";
   const sec = Math.ceil(Math.max(0, ms) / 1000);
   return `${String(Math.floor(sec / 3600)).padStart(2, "0")}:${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
 }
 function shortTime(ms: number): string {
   return `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 }
-function player(s: ProgrammeSnapshot, side: "w" | "b"): string {
+function player(s: BoardProgramme, side: "w" | "b"): string {
   const white = side === "w";
   const name = white ? s.game.white : s.game.black;
   const country = white ? s.game.whiteCountry : s.game.blackCountry;
-  const ms = white ? s.clocks.whiteMs : s.clocks.blackMs;
+  const ms = white ? s.clocks?.whiteMs : s.clocks?.blackMs;
   const flag = country && /^[A-Z]{2}$/.test(country)
     ? `<img class="player-flag" src="/flags/${country.toLowerCase()}.svg" alt="${country}">`
     : "";
@@ -71,8 +74,15 @@ function engineSheet(engine: EngineView): string {
   </section>`;
 }
 
-function playedMoves(s: ProgrammeSnapshot): string {
+function playedMoves(s: BoardProgramme): string {
   const moves = s.game.moves;
+  if (s.real) {
+    const tail = moves.slice(-10);
+    return `<footer class="played-moves"><h2>Played moves</h2><ol>${tail.map((san, i) => {
+      const ply = (s.startPly ?? 0) + moves.length - tail.length + i;
+      return `<li><span>${Math.floor(ply / 2) + 1}${ply % 2 ? "…" : "."}</span><b>${e(san)}</b></li>`;
+    }).join("")}</ol></footer>`;
+  }
   const start = Math.max(0, (Math.ceil(moves.length / 2) - 5) * 2);
   const pairs: string[] = [];
   for (let i = start; i < moves.length; i += 2) {
@@ -80,7 +90,7 @@ function playedMoves(s: ProgrammeSnapshot): string {
   }
   return `<footer class="played-moves"><h2>Played moves</h2><ol>${pairs.join("")}</ol></footer>`;
 }
-function recentMoves(s: ProgrammeSnapshot): string {
+function recentMoves(s: BoardProgramme): string {
   const rows = [];
   for (
     let i = Math.max(0, Math.floor((s.game.moves.length - 8) / 2) * 2);
@@ -93,14 +103,16 @@ function recentMoves(s: ProgrammeSnapshot): string {
   }
   return rows.join("");
 }
-function supportingPanel(s: ProgrammeSnapshot): string {
+function supportingPanel(s: BoardProgramme): string {
+  const real = livePanel(s);
+  if (real) return real;
   const waiting = s.engines.every(engine => engine.status === "Updating for this position");
   return s.panel !== "comparison" ? statisticsPanel(s, outcomeEstimate) : waiting
       ? `<div class="pending-panel"><div class="last-move"><span>Last move</span><strong>${e(s.actual.moveLabel)}</strong></div>
            <div class="analysis-status"><span>${s.engines.map(engine => e(engine.name)).join(" / ")}</span><h2>Updating for this position</h2></div></div>`
       : s.engines.map(engineSheet).join("");
 }
-function spotlightContents(s: ProgrammeSnapshot): string {
+function spotlightContents(s: BoardProgramme): string {
   const index = s.scene.frameIndex ?? 0;
   const frames = s.scene.frames!;
   const engine = s.engines.find(engine => engine.id === s.scene.source);
@@ -112,19 +124,19 @@ function spotlightContents(s: ProgrammeSnapshot): string {
           `<li${i + 1 === index ? ' class="current" aria-current="step"' : ""}>${e(frame.moveLabel)}</li>`
         ).join("")}</ol></aside>`;
 }
-function supportingScene(s: ProgrammeSnapshot, content: string): string {
+function supportingScene(s: BoardProgramme, content: string): string {
   return s.scene.kind === "spotlight"
     ? `<div class="spotlight-layer">${spotlightContents(s)}</div>`
-    : `<section class="comparison-panel" aria-label="Engine analysis">${content}</section>`;
+    : `<section class="comparison-panel${s.real ? " directed-panel" : ""}" aria-label="${e(s.scene.title)}">${content}</section>`;
 }
-function programmeHeader(s: ProgrammeSnapshot): string {
+function programmeHeader(s: BoardProgramme): string {
   return `<header class="programme-header"><div class="event"><h1>${e(s.game.event)}</h1>
        <p>${e(s.game.round)}<span>${e(s.game.opening)}</span>${s.game.turn === "w" ? "White" : "Black"} to move</p></div>
-       <div class="broadcast-label"><span class="demo-badge">${e(s.mode)}</span></div></header>`;
+       <div class="broadcast-label">${s.real ? `<strong>${s.real.interrupted ? "Game feed interrupted" : e(s.actual.moveLabel)}</strong>` : '<span class="demo-badge">DEMO</span>'}</div></header>`;
 }
-function programme(s: ProgrammeSnapshot, support: string): string {
+function programme(s: BoardProgramme, support: string): string {
   const spotlight = s.scene.kind === "spotlight";
-  return `<main class="programme" data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
+  return `<main class="programme" ${s.real ? `data-state="underway" data-game-id="${e(s.game.id)}" data-revision="${s.game.revision}" data-panel="${s.panel}"` : ""} data-scene="${s.scene.kind}" data-instance="${s.scene.instance}" data-testid="programme">
     ${programmeHeader(s)}
     <section class="actual-game ${spotlight ? "mini-actual" : "large-actual"}"><h2 class="board-slug">Actual game</h2>
       <div class="players">
@@ -147,20 +159,20 @@ let renderedGame: ProgrammeSnapshot["game"] | undefined;
 let renderedKind = "";
 let renderedInstance = "";
 let renderedSupport = "";
-function isNextPlayedMove(s: ProgrammeSnapshot): boolean {
+function isNextPlayedMove(s: BoardProgramme): boolean {
   const previous = renderedGame;
   return Boolean(previous && s.scene.kind === "actual-move" &&
     s.game.id === previous.id && s.game.epoch === previous.epoch && s.game.revision === previous.revision &&
-    s.game.ply === previous.ply + 1 && previous.moves.every((move, index) => s.game.moves[index] === move));
+    s.game.ply > previous.ply && previous.moves.every((move, index) => s.game.moves[index] === move));
 }
 
-function renderProgramme(s: ProgrammeSnapshot): void {
+function renderProgramme(s: BoardProgramme): void {
   const game = s.game;
   const playersChanged = renderedGame?.turn !== game.turn || renderedGame.white !== game.white ||
     renderedGame.black !== game.black || renderedGame.whiteCountry !== game.whiteCountry ||
     renderedGame.blackCountry !== game.blackCountry;
   const key = JSON.stringify([game.rootKey, game.turn, game.white, game.black, game.whiteCountry, game.blackCountry,
-    s.scene.instance, s.scene.frameIndex, s.engines, s.panel,
+    s.scene.instance, s.scene.frameIndex, s.real?.interrupted, s.engines, s.panel,
     s.panel === "time" && s.moveTimes, s.panel === "history" && s.history.map(r => [r.sesse,r.leela,r.rootKey])]);
   if (key !== renderKey) {
     const transition = renderedInstance && renderedInstance !== s.scene.instance;
@@ -175,6 +187,10 @@ function renderProgramme(s: ProgrammeSnapshot): void {
         for (const side of ["b", "w"] as const) {
           main.querySelector(`.player[data-side="${side}"]`)!.outerHTML = player(s, side);
         }
+      }
+      if (s.real) {
+        main.dataset.panel = s.panel;
+        if (!interrupted) main.querySelector(".programme-header")!.outerHTML = programmeHeader(s);
       }
       if (interrupted) {
         // Publish the played position immediately, then reveal its tint on landing.
@@ -206,7 +222,7 @@ function renderProgramme(s: ProgrammeSnapshot): void {
       app.innerHTML = programme(s, support);
       resizeProgramme();
       const panel = app.querySelector<HTMLElement>(".comparison-panel");
-      if (motion && panel) revealPanel(panel);
+      if (motion && panel && renderedGame?.revision === s.game.revision) revealPanel(panel);
     }
     renderedKind = s.scene.kind;
     renderedGame = s.game;
@@ -214,8 +230,8 @@ function renderProgramme(s: ProgrammeSnapshot): void {
     renderedSupport = support;
   }
   for (const [color, ms] of [
-    ["w", s.clocks.whiteMs],
-    ["b", s.clocks.blackMs],
+    ["w", s.clocks?.whiteMs],
+    ["b", s.clocks?.blackMs],
   ] as const) {
     const el = app.querySelector(`[data-clock="${color}"]`);
     if (el) el.textContent = clock(ms);
@@ -239,6 +255,7 @@ function operatorShell(): void {
           <button data-command="release-move" class="primary">Play actual move</button>
           <button data-command="return-live">Return to actual board</button>
         </div>
+        ${directionControls}
         <p id="command-status" role="status" aria-live="polite"></p>
       </section>
       <aside class="inspector">
@@ -292,6 +309,7 @@ function operatorShell(): void {
         () => void sendCommand(button.dataset.command as Command),
       ),
     );
+  bindDirection(app, () => latest?.mode === "REAL" ? latest : undefined, () => controls, setCommandStatus, operatorDetails);
   app.querySelector("#round-choice")!.addEventListener("change", renderSelector);
   app.querySelector("#take-game")!.addEventListener("click", () => void changeSelection("select-game"));
   app.querySelector("#enter-demo")!.addEventListener("click", () => void changeSelection("enter-demo"));
@@ -355,6 +373,7 @@ function renderSelector(): void {
   const choice = controls?.catalogue.games.find(game => game.id === select.value);
   const ready = Boolean(connected && !pending && latest && controls &&
     latest.selectionEpoch === controls.selectionEpoch);
+  updateDirection(app, controls, latest?.mode === "REAL" ? latest : undefined, ready);
   select.disabled = !controls;
   const take = app.querySelector<HTMLButtonElement>("#take-game")!;
   take.disabled = !ready || !choice;
@@ -373,7 +392,7 @@ function renderSelector(): void {
 
 function renderRealOperator(s: RealProgramme): void {
   const game = s.game;
-  const scene = s.recap ? recapLabels[s.recap.page] : s.waiting ? waitingHeadline(s) : roundStates[s.state];
+  const scene = s.live ? (s.live.scene.kind === "spotlight" ? "Analysis variation" : s.live.panel) : s.recap ? recapLabels[s.recap.page] : s.waiting ? waitingHeadline(s) : roundStates[s.state];
   setText("#director-scene", game ? `${game.label} · ${scene}` : scene);
   setText("#bound-event", s.eventName);
   setText("#bound-round", game?.label ?? "No game selected");
@@ -565,9 +584,16 @@ function accept(s: BroadcastSnapshot): void {
       void operatorDetails();
     }
     renderOperator(s);
+  } else if (s.mode === "REAL" && s.live) {
+    renderProgramme(liveView(s));
+    if (previous?.mode === "REAL" && previous.waiting && !newStream && !recovering && connected && !reducedMotion.matches)
+      app.querySelector(".programme")?.classList.add("opening-take");
   } else if (s.mode === "DEMO") {
     renderProgramme(s);
   } else {
+    cutProgrammeMotion();
+    renderedGame = undefined;
+    renderedInstance = renderedKind = renderedSupport = "";
     const waiting = s.waiting;
     const showsCountdown = waiting && (waiting.remainingSeconds ?? 0) > 0;
     const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis,

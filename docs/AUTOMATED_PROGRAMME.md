@@ -4,7 +4,7 @@
 
 ## Starting point after G5
 
-[PR #24](https://github.com/c0d3rb4b4/championship-chess-director/pull/24) completed selection, waiting, live move delivery, finished-game replay and rehearsal. The remaining visible gap is **during play**. In that revision, `Broadcast.activate()` constructs `Director` for DEMO, while `realSnapshot()` has a waiting cursor and a finished recap cursor but no live scene cursor. The real renderer can show the last move and matching engine lines indefinitely. The demo demonstrates the intended pacing and motion. Its scripted moves, clocks and search samples belong only to rehearsal.
+[PR #24](https://github.com/c0d3rb4b4/championship-chess-director/pull/24) completed selection, waiting, live move delivery, finished-game replay and rehearsal. The G5 gap was **during play**. In that revision, `Broadcast.activate()` constructs `Director` for DEMO, while `realSnapshot()` has a waiting cursor and a finished recap cursor but no live scene cursor. The real renderer can show the last move and matching engine lines indefinitely. The demo demonstrates the intended pacing and motion. Its scripted moves, clocks and search samples belong only to rehearsal.
 
 ## What a viewer should see
 
@@ -19,17 +19,19 @@
 
 The server owns scene selection and timing even when there are no clients. Keep added programme delay at its existing default of zero. For any configured delay, apply the same release rule to the board, analysis, clocks, panel exits and every viewer. The 500 ms target starts at eligibility on this timeline. Source transmission and polling latency are measured separately. An optional layout pin yields to a move. Explicit emergency HOLD is a producer override with a visible state and a deliberate resume.
 
-## Remaining development
+## Software checkpoints
 
-Use these checkpoints together in an all-development run. The [original milestones](PHASED_PLAN.md#sequence-and-dependencies) track release evidence. External observations can stay open while independent engineering proceeds. Update the status and evidence here as work lands.
+The [implementation PR](https://github.com/c0d3rb4b4/championship-chess-director/pull/26) covers all five checkpoints. The [original milestones](PHASED_PLAN.md#sequence-and-dependencies) track release evidence. External observations can stay open while independent engineering proceeds. Update the status and evidence here as work lands.
 
-| Checkpoint | Starting status | Implementation and proof |
+| Checkpoint | Software status | Implementation and proof |
 |---|---|---|
-| 1. Shared real-game cycle (M1/M2) | Open | Connect the released live position and history to the shared server director and normal renderer. Reuse the demo's eligible-panel selection, graphics and motion where applicable. Begin with the PGN-only cycle, then add each supported engine/time panel. Persist or reconstruct scene anchors across refresh and restart. Keep DEMO explicit. Prove two viewers cycle after the operator closes. |
-| 2. Live analysis and clocks (M0/M1) | Partial | Reuse the recorder, decoders and field audit. Exercise Sesse full/delta updates and Leela subscriptions, partial updates and reconnects on successive real positions. Verify clock convention, time control, score scope, perspective, units and search-share denominator before enabling each dependent field. Attempt private in-play capture and replay twice when available. Build the full path with original deterministic inputs; record missing production evidence per field and continue. |
-| 3. Spotlights, interruptions and recovery (M1/M2) | Open on the real path | Freeze a ready PV at its eligible root. Apply the PRD's 75 s threshold, 24 s maximum, 90 s cooldown and 45 s large-board interval. Retain at least 70% large-board time over the specified rolling five minutes. Exercise low clocks, three moves in 30 s, return from pressure, authority loss, corrections, switches and missing delay-buffer recovery. Validate epoch, revision and full history before publishing. |
-| 4. Producer controls and persistence (M1/M2) | Partial | Default automatic direction on. Complete protected optional overrides, HOLD/resume, validated cadence/profile import/export and safe delay changes. Preserve existing selection and idempotent commands. Check journal compaction, restart with an intact buffer, and recovery when a time interval is missing. |
-| 5. Unattended regression and endurance (M3) | Partial | Extend the PR/main capture job and runbook for the real in-play cycle, variation and interrupts. Automate an eight-hour replay with long thinks, rapid moves, outages, restart and an interval. Record memory, journal growth, clock drift, reconnections and scene shares. Keep accelerated test time, elapsed soak time and actual OBS encoding identifiable in the report. |
+| 1. Shared real-game cycle | Implemented | A single released scene drives every viewer and preview. The real renderer shares the demo board animation. PGN alone rotates played notation and game totals. Each engine, clock and history panel has its own data gate. |
+| 2. Live analysis and clocks | Implemented with per-field production gates | Bound Sesse deltas and Leela subscriptions follow successive roots. Per-source work, legal PVs, typed scores, verified clock anchors, staged time controls and separately gated WDL/visit shares use the released journal. Both deployed engines matched Game 4 across 11.a4 and 11…b6. See the field-by-field record. |
+| 3. Spotlights, interruptions and recovery | Implemented | Stable advancing search, verified history and healthy clocks gate a frozen legal variation. Real moves preempt every ordinary panel and all phases of playback. The 22-case matrix measures the 1080p, 720p and preview surfaces. |
+| 4. Producer controls and persistence | Implemented | Automatic direction by default, optional pin, next, eligible variation, return, HOLD/resume and validated versioned cadence. Delay changes start a fresh buffer under HOLD. SQLite preserves scene deadlines, frozen lines, commands and per-ply evidence and detects missing journal coverage. |
+| 5. Unattended regression and endurance | Implemented | The PR/main capture workflow exercises the normal routes and publishes stills, clips, paint measurements and two accelerated eight-hour replays with resource samples and a deterministic digest. |
+
+[Rehearsal, private feed observations and remaining broadcast sign-off](evidence/unattended/README.md) · [Operator runbook](../README.md#match-day-runbook)
 
 ### Acceptance through the normal routes
 
@@ -45,7 +47,7 @@ Use these checkpoints together in an all-development run. The [original mileston
 Paste this into a fresh project chat after the documentation PR merges. Reuse the same prompt to resume an open implementation PR.
 
 ```text
-@GitHub Use c0d3rb4b4/championship-chess-director. Complete all remaining development in docs/AUTOMATED_PROGRAMME.md against current main. Read the repo instructions, design, PRD, provider contracts, original milestones and G1–G5 evidence. Inspect merged and open PRs. Reuse an existing implementation branch if present. Work through every unfinished software checkpoint in this run.
+@GitHub Use c0d3rb4b4/championship-chess-director. Complete all remaining development in docs/AUTOMATED_PROGRAMME.md against current main. Read the repo instructions, design, PRD, provider contracts, original milestones and G1–G5 evidence. Inspect merged and open PRs. Reuse an existing implementation branch if present. Work through every unfinished software checkpoint in this run. If the table is implemented on main, report the verification and remaining external checks.
 
 After one Take Game action in /operator, /programme must run unattended even with the operator tab closed. Cycle all eligible graphics from real released data, including useful PGN-only graphics when both engines are absent. Play settled engine lines automatically during long thinks. Every released live move interrupts any graphic or animation in one update, shows the correct actual board within 500 ms of eligibility, and resumes the cycle automatically. Follow the plan for delay, pressure, result, corrections, recovery and optional overrides. Keep demo explicit.
 

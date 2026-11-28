@@ -210,7 +210,7 @@ for (const delay of [0, 60_000]) test(`waiting, archived replay and single openi
       const transitions = { openings: 0, afterReleaseReplays: 0, paint: 0 };
       const report = () => { document.documentElement.dataset.g4Transition = JSON.stringify(transitions); };
       document.addEventListener("animationstart", e => {
-        if ((e.target as Element).matches(".opening-take .live-sheet")) {
+        if ((e.target as Element).matches(".opening-take .directed-panel")) {
           transitions.openings++;
           report();
         }

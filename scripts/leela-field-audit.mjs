@@ -25,7 +25,7 @@ export class LeelaFieldAudit {
       if (!atRoot(row) || row.evalId !== evalId || evalId === undefined) continue;
       this.evaluation ??= { evalId, totalNodes: null, wdlByMove: new Map() };
       if ("nodes" in row) this.evaluation.totalNodes = count(row.nodes) ?? null;
-      for (const move of row.variations) {
+      for (const move of row.variations ?? []) {
         if (move.pvUci === undefined) continue;
         const firstUci = move.pvUci.trim().split(/\s+/, 1)[0];
         this.evaluation.wdlByMove.set(firstUci, wdl(move));

@@ -1,7 +1,7 @@
 import type { CatalogueGame } from "../shared/catalogue.js";
 import type { EngineId, LiveAnalysis, RealProgramme, SelectionControls } from "../shared/types.js";
 import { AuthorityHttpError, BindingError, fetchGameRecord, gamePosition, gameSummary } from "./game-summary.js";
-import { followAnalysis, type AnalysisTransport } from "./providers/live-analysis.js";
+import { followAnalysis, type SesseSession, type AnalysisTransport } from "./providers/live-analysis.js";
 import type { AuthorityState, Store } from "./store.js";
 import { Recap } from "./recap.js";
 
@@ -19,13 +19,17 @@ export class GameFeed {
   readonly sources = { sesse: "Idle", leela: "Idle" };
   released: Pick<RealProgramme, "position" | "analysis" | "interrupted"> = {};
   recap?: Recap;
+  rootAt = 0;
+  facts?: Recap["facts"];
   private releasedRoot?: number;
   readonly delay: number;
   private readonly lifetime = new AbortController();
+  private wire: SesseSession = {};
   private engines?: AbortController;
   private raw: ReturnType<Store["authorityAt"]>;
   private engineValues: Partial<Record<EngineId, LiveAnalysis>> = {};
   private releaseAt: number;
+  private analysisRefreshAt = 0;
   private pollAt = 0;
   private failures = 0;
   private readonly clock: () => number;
@@ -42,9 +46,16 @@ export class GameFeed {
 
   private release(now: number) {
     const eligible = this.store.authorityAt(this.epoch, this.identity, now);
-    if (this.releasedRoot !== eligible?.id) {
+    const changedRoot = this.releasedRoot !== eligible?.id;
+    if (changedRoot) {
       const position = eligible?.state.position;
+      this.rootAt = eligible?.eligible ?? 0;
       this.recap = undefined;
+      this.facts = undefined;
+      if (eligible && position?.moves.length && !position.summary.result) {
+        this.facts = new Recap(this.game.id, position, eligible.eligible,
+          this.store.recapJournal(this.epoch, this.identity, eligible.id, eligible.eligible)).facts;
+      }
       if (eligible && position?.summary.result) {
         const finishedAt = eligible.state.finishedAt ?? this.store.finalRelease(this.epoch, this.identity, position) ?? eligible.eligible;
         this.recap = new Recap(this.game.id, position, finishedAt,
@@ -52,16 +63,24 @@ export class GameFeed {
       }
       this.releasedRoot = eligible?.id;
     }
-    this.released = eligible ? {
-      position: eligible.state.position ?? undefined,
-      interrupted: eligible.state.interrupted,
-      analysis: this.store.analysisAt(eligible.id, now),
-    } : {};
     this.releaseAt = this.store.nextRelease(this.epoch, this.identity, now);
+    let analysis = eligible ? this.store.analysisAt(eligible.id, now) : {};
+    // Root changes, new sources and invalidations bypass value coalescing.
+    const previous = this.released.analysis;
+    if (!changedRoot && previous && Object.keys(previous).join() === Object.keys(analysis).join() && now < this.analysisRefreshAt) {
+      analysis = previous;
+      this.releaseAt = Math.min(this.releaseAt, this.analysisRefreshAt);
+    } else if (Object.keys(analysis).length) this.analysisRefreshAt = now + 500;
+    this.released = eligible ? {
+      position: changedRoot ? eligible.state.position ?? undefined : this.released.position,
+      interrupted: eligible.state.interrupted, analysis,
+    } : {};
+
   }
 
   private accept(state: AuthorityState, raw: string, now: number, eligible: number) {
     const id = this.store.feedEvent(this.epoch, this.identity, "authority", null, now, eligible, raw, state);
+    if (state.interrupted || this.raw?.state.position?.revision !== state.position?.revision) this.wire = {};
     this.raw = { id, state, eligible };
     this.engines?.abort();
     this.engines = undefined;
@@ -73,8 +92,17 @@ export class GameFeed {
   private engine(root: number, source: EngineId, value: LiveAnalysis | null, raw: unknown) {
     if (root !== this.raw?.id || this.lifetime.signal.aborted) return;
     this.sources[source] = value ? "Matched position" : typeof raw === "string" ? raw : "Awaiting matching analysis";
-    if (JSON.stringify(this.engineValues[source] ?? null) === JSON.stringify(value)) return;
     const now = this.clock();
+    const prior = this.engineValues[source];
+    if (value?.work !== undefined) {
+      const same = prior?.line[0] === value.line[0] && prior.progress && prior.work !== undefined && prior.work <= value.work;
+      const advance = same && value.work > prior!.work!;
+      const firstAt = same ? prior!.progress!.firstAt : now;
+      const count = same ? prior!.progress!.count + Number(advance) : 1;
+      value.progress = { firstAt, count, ready: count >= 3 && (advance ? now - firstAt >= 6000 : !!prior?.progress?.ready),
+        delta: advance ? value.work - prior!.work! : same ? prior?.progress?.delta : undefined };
+    }
+    if (JSON.stringify(prior ?? null) === JSON.stringify(value)) return;
     const eligible = now + this.delay;
     this.store.feedEvent(this.epoch, this.identity, source, root, now, eligible, JSON.stringify(raw), value);
     if (value) this.engineValues[source] = value;
@@ -96,11 +124,14 @@ export class GameFeed {
       const summary = gameSummary(decoded);
       const sameMoves = old && JSON.stringify(old.moves) === JSON.stringify(decoded.moves);
       const sameResult = old?.summary.result === summary.result;
-      const sameFacts = old?.opening === decoded.opening && JSON.stringify(old?.elapsed) === JSON.stringify(decoded.elapsed);
-      if (!sameMoves || this.raw?.state.interrupted || !sameResult || (summary.result && !sameFacts)) {
+      const sameFacts = old?.opening === decoded.opening && JSON.stringify(old?.elapsed) === JSON.stringify(decoded.elapsed) &&
+        JSON.stringify(old?.clocks) === JSON.stringify(decoded.anchors);
+      if (!sameMoves || this.raw?.state.interrupted || !sameResult || !sameFacts) {
         const correction = old && (!old.moves.every((san, i) => decoded.moves[i] === san) ||
           (old.summary.result !== null && (!sameResult || !sameMoves)));
         const position = gamePosition(this.game, decoded, now, (old?.revision ?? 1) + Number(Boolean(correction)));
+        if (position.clocks) position.clockRunning = !!old && !this.raw?.state.interrupted && !correction &&
+          !summary.result && position.moves.length === old.moves.length + 1;
         let eligible = now + this.delay;
         if (!this.raw && summary.result && this.delay) {
           const cached = this.store.previousFinal(this.identity, this.epoch);
@@ -125,7 +156,7 @@ export class GameFeed {
         // Previously persisted observations can be cleared by the first fresh response after restart.
         this.engineValues = this.store.analysisAt(root, Number.MAX_SAFE_INTEGER);
         followAnalysis(this.game, decoded, this.engines.signal, this.options,
-          (source, value, raw) => this.engine(root, source, value, raw));
+          (source, value, raw) => this.engine(root, source, value, raw), this.wire);
       }
     } catch (error) {
       if (signal.aborted) return;

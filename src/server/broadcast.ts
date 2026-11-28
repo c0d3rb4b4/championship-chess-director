@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { BroadcastOperator, BroadcastSnapshot, Command, FinishedRecap, RealProgramme, SelectionControls, WaitingProgramme } from "../shared/types.js";
 import type { Catalogue, CatalogueGame } from "../shared/catalogue.js";
 import { loadCatalogue, parseCatalogue } from "./catalogue.js";
 import { GameFeed, type FeedOptions } from "./game-feed.js";
+import { LiveDirector, validateProfile } from "./live-director.js";
 import { Director } from "./director.js";
 import { PreviousGame, programmeGame, serialAuthority } from "./previous-game.js";
 import type { Recap } from "./recap.js";
@@ -23,11 +25,22 @@ function identity(catalogue: Catalogue, game: CatalogueGame) {
   return JSON.stringify([catalogue.eventId, game.id, game.white.id, game.black.id, game.startFen, game.binding]);
 }
 
+// Adding a newly verified optional field keeps the accepted chapter and authority journal.
+function compatibleIdentity(previous: string, next: string) {
+  try {
+    const a = JSON.parse(previous), b = JSON.parse(next);
+    const oldBinding = a.pop(), newBinding = b.pop();
+    return JSON.stringify(a) === JSON.stringify(b) && oldBinding && newBinding &&
+      Object.keys(oldBinding).every(k => JSON.stringify(oldBinding[k]) === JSON.stringify(newBinding[k]));
+  } catch { return false; }
+}
+
 /** One shared selection and one authority session per take, independent of SSE subscriber count. */
 export class Broadcast {
   private catalogue: Catalogue;
   private catalogueWarning: string | null;
   private scheduleCheckAt = 0;
+  private scheduleText?: string;
   private selection: Selection;
   private feed?: GameFeed;
   private previousGame?: PreviousGame;
@@ -38,6 +51,11 @@ export class Broadcast {
   private sequence = 0;
   private readonly streamId = randomUUID();
   private director?: Director;
+  private live?: LiveDirector;
+  private directionKey = "";
+  private lastSave = 0;
+  private compactAt = 0;
+  private controlWarning: string | null = null;
   private baseMs = 0;
   private anchor = 0;
   private persistedSecond = -1;
@@ -45,6 +63,10 @@ export class Broadcast {
 
   constructor(private readonly store: Store, private readonly options: BroadcastOptions, private readonly publish: () => void) {
     if (!Number.isSafeInteger(options.delayMs ?? 0) || (options.delayMs ?? 0) < 0) throw Error("Invalid programme delay");
+    if (!options.wallNow) {
+      const wall = Date.now(), mono = performance.now();
+      this.options = { ...options, wallNow: () => wall + Math.floor(performance.now() - mono) };
+    }
     this.selection = store.loadSelection();
     const cached = store.loadCatalogue<Catalogue>();
     let catalogue: Catalogue;
@@ -92,7 +114,9 @@ export class Broadcast {
     if (now < this.scheduleCheckAt) return;
     this.scheduleCheckAt = now + 1000;
     try {
-      const updated = loadCatalogue(this.options.cataloguePath);
+      const text = readFileSync(this.options.cataloguePath ?? "config/championship.json", "utf8");
+      if (text === this.scheduleText) { this.catalogueWarning = null; return; }
+      const updated = parseCatalogue(JSON.parse(text));
       if (updated.eventId !== this.catalogue.eventId) throw Error("A different event requires a restart");
       // Active identities and bindings are pinned. Only the verified schedule is hot-reloaded.
       const starts = new Map(updated.games.map(game => [game.id, game]));
@@ -108,6 +132,7 @@ export class Broadcast {
         this.catalogue = catalogue;
       }
       this.catalogueWarning = null;
+      this.scheduleText = text;
     } catch (error) {
       this.catalogueWarning = "Using the last validated schedule. " + (error instanceof Error ? error.message : "Configuration unavailable");
     }
@@ -122,6 +147,9 @@ export class Broadcast {
     this.recapMetadata = undefined;
     this.legacySummary = null;
     this.director = undefined;
+    this.live = undefined;
+    this.directionKey = "";
+    this.controlWarning = null;
     if (this.selection.mode === "demo") {
       this.director = new Director(this.store.load());
       this.baseMs = this.director.checkpoint().elapsedMs;
@@ -133,14 +161,28 @@ export class Broadcast {
     const game = this.game;
     const readAuthority = serialAuthority(() => this.wallNow());
     this.delay = game ? this.store.sessionDelay(this.selection.epoch, this.options.delayMs ?? 0) : 0;
+    if (game) {
+      const now = this.wallNow();
+      const saved = this.store.direction(this.selection.epoch);
+      if (saved && this.delay && (!this.store.journalIntact(this.selection.epoch) || now - saved.seen > (this.options.pollMs ?? 15000) + 2000)) {
+        // No producer process observed this interval. Rebind before releasing any of it.
+        this.store.withTransaction(() => this.store.refill(this.selection.epoch, this.delay, saved.state, now));
+        this.selection = this.store.loadSelection();
+      }
+      const persisted = this.store.direction(this.selection.epoch)?.state;
+      const profile = this.store.profile();
+      this.live = new LiveDirector(this.selection.epoch, game.id, persisted ?? (profile ? { profile } : undefined));
+    }
     if (game?.binding) {
-      this.feed = new GameFeed(this.store, this.selection.epoch, identity(this.catalogue, game), game, { ...this.options, readAuthority });
+      const key = identity(this.catalogue, game);
+      const prior = this.store.latestIdentity(this.selection.epoch);
+      if (prior && prior !== key && compatibleIdentity(prior, key)) this.store.adoptIdentity(this.selection.epoch, prior, key);
+      this.feed = new GameFeed(this.store, this.selection.epoch, key, game, { ...this.options, readAuthority });
       // G1 saved a verified summary without a move journal. Preserve its timestamped slate
       // at zero delay until the first full authority read can supply the actual board.
       if (!this.feed.delay) {
-        const { sessePlayers, elapsedTime, ...oldBinding } = game.binding;
         const saved = this.store.loadSummary<{ identity: string; summary: RealProgramme["summary"] }>(this.selection.epoch, game.id);
-        if (saved?.identity === identity(this.catalogue, { ...game, binding: oldBinding })) this.legacySummary = saved.summary;
+        if (saved && compatibleIdentity(saved.identity, key)) this.legacySummary = saved.summary;
       }
     }
     if (game) {
@@ -200,6 +242,41 @@ export class Broadcast {
     const game = selected ? programmeGame(selected, this.store.scheduledStart(this.scheduleKey(selected), presentationTime)) : null;
     const state = this.realState(game, presentationTime);
     const summary = this.feed?.released.position?.summary ?? this.legacySummary;
+    const director = this.live;
+    let live = this.feed && director?.at(this.feed, now);
+    if (director) {
+      for (const row of this.store.dueControls(this.selection.epoch, now)) {
+        const { command, value } = JSON.parse(String(row.request));
+        this.store.withTransaction(() => {
+          try {
+            if ((row.root && row.root !== live?.rootKey) || director.state.held) throw Error("Superseded before release");
+            director.control(command, now, value);
+            live = this.feed && director.at(this.feed, now);
+            if (command === "profile") this.store.saveProfile(director.state.profile);
+            this.store.finishControl(String(row.id), "applied");
+          } catch (error) {
+            this.controlWarning = String(error);
+            this.store.finishControl(String(row.id), this.controlWarning);
+          }
+          this.store.saveDirection(this.selection.epoch, director.state, now);
+        });
+      }
+      const { spotlight, ...state } = director.state;
+      const key = JSON.stringify([state, spotlight?.at]);
+      if (key !== this.directionKey) {
+        this.store.saveDirection(this.selection.epoch, director.state, now);
+        this.directionKey = key;
+        this.lastSave = now;
+      } else if (now - this.lastSave >= 1000) {
+        this.store.directionHeartbeat(this.selection.epoch, now);
+        this.lastSave = now;
+      }
+      if (director.state.held) {
+        if (previous?.state === "hold") return previous;
+        return { mode: "REAL", streamId: this.streamId, sequence: ++this.sequence, selectionEpoch: this.selection.epoch,
+          eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone, game, state: "hold", summary: null };
+      }
+    }
     const recap = this.currentRecap(now);
     let waiting: WaitingProgramme | undefined;
     if (game && state !== "underway" && state !== "finished") {
@@ -207,7 +284,8 @@ export class Broadcast {
         : Math.max(0, Math.ceil((Date.parse(game.scheduledStart) - presentationTime) / 1000));
       this.previousGame ??= this.makePreviousGame?.();
       const archiveReady = !this.feed || !this.feed.reading;
-      waiting = { remainingSeconds, previous: this.previousGame?.at(now, archiveReady) };
+      const previous = this.previousGame?.at(now, archiveReady);
+      if (state !== "buffering") waiting = { remainingSeconds, previous };
     } else {
       // The first released move or result already won this tick. Cancel archive lookups
       // and never emit a superseded replay frame beside the new actual board.
@@ -215,7 +293,10 @@ export class Broadcast {
       this.previousGame = undefined;
     }
     const oldArchive = previous?.waiting?.previous, archive = waiting?.previous;
-    if (previous && !feedChanged && previous.state === state && previous.game?.scheduledStart === game?.scheduledStart &&
+    if (previous && !feedChanged && previous.live?.scene.instance === live?.scene.instance &&
+        previous.live?.scene.frameIndex === live?.scene.frameIndex &&
+        Math.ceil((previous.live?.clocks?.whiteMs ?? 0)/1000) === Math.ceil((live?.clocks?.whiteMs ?? 0)/1000) &&
+        Math.ceil((previous.live?.clocks?.blackMs ?? 0)/1000) === Math.ceil((live?.clocks?.blackMs ?? 0)/1000) && previous.state === state && previous.game?.scheduledStart === game?.scheduledStart &&
         previous.timeZone === this.catalogue.timeZone && previous.recap?.page === recap?.page &&
         previous.recap?.replay?.ply === recap?.replay?.ply && previous.waiting?.remainingSeconds === waiting?.remainingSeconds &&
         oldArchive?.game.id === archive?.game.id && oldArchive?.result === archive?.result &&
@@ -224,7 +305,7 @@ export class Broadcast {
     return {
       mode: "REAL", streamId: this.streamId, sequence: ++this.sequence, selectionEpoch: this.selection.epoch,
       eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone, game,
-      state, ...this.feed?.released, recap, waiting, summary,
+      state, ...this.feed?.released, live, recap, waiting, summary,
     };
   }
 
@@ -239,6 +320,10 @@ export class Broadcast {
       this.current = { ...next, streamId: this.streamId, selectionEpoch: this.selection.epoch, sequence: ++this.sequence };
     } else if (this.current.mode === "REAL") {
       const now = this.wallNow();
+      if (now >= this.compactAt) {
+        this.store.compact(now);
+        this.compactAt = now + 60000;
+      }
       this.refreshSchedule(now);
       const feedChanged = this.feed?.tick();
       this.current = this.realSnapshot(now, this.current, feedChanged);
@@ -251,7 +336,9 @@ export class Broadcast {
       catalogue: this.catalogue, selectionEpoch: this.selection.epoch,
       authorityStatus: this.feed?.status ?? (this.game ? "pending-binding" : "idle"),
       ...(this.feed && { feedHealth: { delayMs: this.feed.delay, lastRead: this.feed.lastRead, ...this.feed.sources } }),
-      diagnostic: [this.catalogueWarning, this.feed?.diagnostic, this.previousGame?.diagnostic].filter(Boolean).join(" ") || null,
+      ...(this.live && { direction: { profile: this.live.state.profile, held: this.live.state.held,
+        automatic: this.live.state.automatic, pinned: this.live.state.pinned } }),
+      diagnostic: [this.controlWarning, this.catalogueWarning, this.feed?.diagnostic, this.previousGame?.diagnostic].filter(Boolean).join(" ") || null,
     };
     if (this.current.mode === "REAL") return { ...controls, programme: this.current };
     return { ...controls, ...this.director!.operator(this.current, this.store.count) };
@@ -269,6 +356,41 @@ export class Broadcast {
       ? "Command ID was already used for another request" : "On-air selection changed. Review the active game before taking another.");
     this.selection = this.store.loadSelection();
     this.activate();
+    this.publish();
+    return false;
+  }
+
+  control(id: string, epoch: number, command: string, value: unknown, expectedRoot?: string) {
+    const request = JSON.stringify({ command, value, expectedRoot });
+    const prior = this.store.directionCommand(id);
+    if (prior && prior.epoch === epoch && prior.request === request) return true;
+    if (this.store.getCommand(id)) throw new CommandError(409, "Command ID already used");
+    const director = this.live;
+    if (!director || epoch !== this.selection.epoch || this.current.mode !== "REAL") throw new CommandError(409, "Selection changed");
+    const now = this.wallNow(), root = this.current.live?.rootKey;
+    const scoped = ["next","pin","feature","actual","pause-auto"].includes(command);
+    if (scoped && (!root || expectedRoot !== root)) throw new CommandError(409, "Released position changed");
+    if (command === "profile") {
+      try { validateProfile(value); } catch (e) { throw new CommandError(400, String(e)); }
+    }
+    if (command === "delay" && (!director.state.held || typeof value !== "number" || !Number.isSafeInteger(value) ||
+        value < 0 || value > 3600000)) throw new CommandError(409, "Change delay under HOLD, from 0 to 3600 seconds");
+    if (command === "feature" && !director.featureEligible) throw new CommandError(409, "No eligible variation");
+    if (command === "pin" && !director.panelEligible(value)) throw new CommandError(409, "Panel unavailable");
+    this.store.withTransaction(() => {
+      const immediate = ["hold","resume","delay"].includes(command);
+      this.store.queueControl(id, epoch, request, immediate ? now : now + this.delay, scoped ? root! : null);
+      if (immediate) {
+        if (command === "delay") this.store.refill(epoch, Number(value), director.state, now);
+        else {
+          director.control(command, now);
+          this.store.saveDirection(epoch, director.state, now);
+        }
+        this.store.finishControl(id, "applied");
+      }
+    });
+    if (command === "delay") { this.selection = this.store.loadSelection(); this.activate(); }
+    else this.tick();
     this.publish();
     return false;
   }
@@ -301,6 +423,7 @@ export class Broadcast {
   }
 
   stop() {
+    if (this.live) this.store.saveDirection(this.selection.epoch, this.live.state, this.wallNow());
     this.feed?.stop();
     this.previousGame?.stop();
     if (this.director) this.store.save(this.director.checkpoint());

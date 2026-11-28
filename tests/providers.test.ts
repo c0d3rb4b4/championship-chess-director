@@ -97,3 +97,15 @@ test("Sesse can advance before the authority without emitting future analysis", 
   assert.equal(matching?.nodes, 420);
   assert.equal(source.lastWorkMs, 120);
 });
+
+test("same-evaluation Leela patches preserve omitted work and require a fresh match after divergence", () => {
+  const receive = new LeelaReplay().subscribe(7, game);
+  const ids = { gameId: 7, ply: game.moves.length };
+  receive({ positions: [{ ...ids, fen: game.fen }], evaluations: [
+    { ...ids, evalId: 3, variations: [{ pvUci: "e7e5", nodes: 100 }] }] });
+  const patch = receive({ positions: [{ ...ids, scoreW: 300 }],
+    evaluations: [{ ...ids, evalId: 3, variations: [{ pvUci: "e7e5 g1f3" }] }, { ...ids, evalId: 3, nodes: 110 }] });
+  assert.deepEqual(patch?.candidates, [{ pv: ["e5", "Nf3"], evalId: 3, nodes: 100 }]);
+  assert.equal(receive({ positions: [{ ...ids, fen: binding.startFen }] }), undefined);
+  assert.equal(receive({ positions: [{ ...ids, nodes: 120 }] }), undefined);
+});

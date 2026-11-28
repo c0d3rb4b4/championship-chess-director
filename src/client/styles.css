@@ -513,3 +513,18 @@ p {
 @media (prefers-reduced-motion: no-preference) {
   .opening-take .live-sheet { animation: recap-page-in 350ms ease-out both; }
 }
+
+.live-score > strong { display: block; font: 700 94px/1.2 var(--display); margin: 36px 0; }
+.live-score ol { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 24px; }
+.live-score li { padding: 10px 0; border-top: 1px solid var(--rule); font: 600 40px/1.15 var(--display); }
+.directed-panel > .recap-stats { margin: 0; padding: 32px; background: #1a1b1a; }
+.programme[data-state="underway"] .broadcast-label { font: 700 35px var(--display); }
+@media (prefers-reduced-motion: no-preference) {
+  .opening-take .directed-panel { animation: recap-page-in 350ms ease-out both; }
+}
+#direction-controls { padding: 14px 0; }
+#direction-controls label { display: block; margin-top: 12px; }
+#direction-controls textarea { width: 100%; }
+#direction-controls .selection-actions { flex-wrap: wrap; }
+.programme-header .event p span:empty { display: none; }
+.live-player time { margin-left: auto; font-variant-numeric: tabular-nums; }
