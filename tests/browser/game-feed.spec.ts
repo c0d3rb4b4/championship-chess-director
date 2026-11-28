@@ -18,7 +18,7 @@ async function listen(server: Server, port = 0) {
 }
 
 for (const seconds of [0, 60]) test(`selected feed through both viewers and preview, delay ${seconds}s`,
-  { tag: "@review-captures" }, async ({ browser }) => {
+  { tag: "@review-captures" }, async ({ browser, playwright, channel }) => {
   test.setTimeout(60_000);
   const temp = await mkdtemp(join(tmpdir(), "game-feed-"));
   const catalogue = loadCatalogue(), game = catalogue.games[3];
@@ -43,16 +43,22 @@ for (const seconds of [0, 60]) test(`selected feed through both viewers and prev
     openSocket() { throw Error("Leela offline"); },
   });
   let app = launch();
-  const context = await browser.newContext();
+  // Each paint measurement needs a foreground viewer. Full Chrome throttles animation
+  // frames in background tabs of one window even while their SSE and DOM updates continue.
+  const [hdBrowser, sdBrowser] = await Promise.all([
+    playwright.chromium.launch({ channel }), playwright.chromium.launch({ channel }),
+  ]);
+  const operator = await browser.newPage();
   try {
     const base = await listen(app.server);
     const snapshot = async (): Promise<RealProgramme> => (await fetch(base + "/api/programme")).json();
-    const [operator, hd, sd] = await Promise.all([context.newPage(), context.newPage(), context.newPage()]);
+    const [hd, sd] = await Promise.all([hdBrowser.newPage(), sdBrowser.newPage()]);
     await hd.setViewportSize({ width: 1920, height: 1080 });
     await sd.setViewportSize({ width: 1280, height: 720 });
     await Promise.all([operator.goto(base + "/operator"), hd.goto(base + "/programme"), sd.goto(base + "/programme")]);
     const preview = operator.frameLocator("iframe").getByTestId("programme");
     const outputs = [hd.getByTestId("programme"), sd.getByTestId("programme"), preview];
+    for (const output of outputs) expect(await output.evaluate(() => document.visibilityState)).toBe("visible");
     const after = async (state: string, moves: string[], extra?: (surface: Locator) => Promise<void>) => {
       const actual = new Chess();
       moves.forEach(move => actual.move(move));
@@ -134,7 +140,7 @@ ${moves} ${result}`);
       await expect.poll(() => surface.evaluate(() => Number(document.documentElement.dataset.firstBoardPaint))).toBeGreaterThan(0);
       return await surface.evaluate(() => Number(document.documentElement.dataset.firstBoardPaint)) - releasedAt;
     }));
-    expect(Math.max(...times)).toBeLessThan(500);
+    expect(Math.max(...times), `first paint (1080p, 720p, preview) in ms: ${times.join(", ")}`).toBeLessThan(500);
     await mkdir(`${out}/g2`, { recursive: true });
     await writeFile(`${out}/g2/paint-D${seconds}.json`, JSON.stringify({ delaySeconds: seconds, hd: times[0], sd: times[1], preview: times[2] }) + "\n");
     if (!seconds) { await sd.waitForTimeout(800); await sd.screencast.stop(); }
@@ -192,7 +198,7 @@ ${moves} ${result}`);
     await after("underway", final, async s => { await expect(s).toHaveAttribute("data-revision", "3"); });
     journal.close();
   } finally {
-    await context.close();
+    await Promise.all([operator.close(), hdBrowser.close(), sdBrowser.close()]);
     await app.close();
     server.closeAllConnections();
     await new Promise<void>(resolve => server.close(() => resolve()));
