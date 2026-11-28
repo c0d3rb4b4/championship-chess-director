@@ -4,6 +4,8 @@ Start with **Phase 0, the metal board and matching piece set**, to review the ne
 
 [Product requirements](Live_Chess_Broadcast_UI_PRD.docx) · [Technical design](DESIGN.md) · [Demo implementation](DEMO_SLICE.md) · [Review captures](evidence/README.md)
 
+For the real-game selector, pre-game countdown and post-game programme, use the [game-day implementation phases and repeatable prompt](GAME_DAY_PLAN.md). That plan tracks the selected-game workflow alongside the broader provider and broadcast milestones below.
+
 ## What exists today
 
 | Area | Pilot baseline through `64377bb` | Boundary to carry forward |
