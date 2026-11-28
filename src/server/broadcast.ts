@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import type { BroadcastOperator, BroadcastSnapshot, Command, FinishedRecap, RealProgramme, SelectionControls, WaitingProgramme } from "../shared/types.js";
 import type { Catalogue, CatalogueGame } from "../shared/catalogue.js";
@@ -39,6 +40,7 @@ export class Broadcast {
   private catalogue: Catalogue;
   private catalogueWarning: string | null;
   private scheduleCheckAt = 0;
+  private scheduleText?: string;
   private selection: Selection;
   private feed?: GameFeed;
   private previousGame?: PreviousGame;
@@ -112,7 +114,9 @@ export class Broadcast {
     if (now < this.scheduleCheckAt) return;
     this.scheduleCheckAt = now + 1000;
     try {
-      const updated = loadCatalogue(this.options.cataloguePath);
+      const text = readFileSync(this.options.cataloguePath ?? "config/championship.json", "utf8");
+      if (text === this.scheduleText) { this.catalogueWarning = null; return; }
+      const updated = parseCatalogue(JSON.parse(text));
       if (updated.eventId !== this.catalogue.eventId) throw Error("A different event requires a restart");
       // Active identities and bindings are pinned. Only the verified schedule is hot-reloaded.
       const starts = new Map(updated.games.map(game => [game.id, game]));
@@ -128,6 +132,7 @@ export class Broadcast {
         this.catalogue = catalogue;
       }
       this.catalogueWarning = null;
+      this.scheduleText = text;
     } catch (error) {
       this.catalogueWarning = "Using the last validated schedule. " + (error instanceof Error ? error.message : "Configuration unavailable");
     }
@@ -256,10 +261,15 @@ export class Broadcast {
           this.store.saveDirection(this.selection.epoch, director.state, now);
         });
       }
-      const key = JSON.stringify(director.state);
-      if (key !== this.directionKey || now - this.lastSave >= 1000) {
+      const { spotlight, ...state } = director.state;
+      const key = JSON.stringify([state, spotlight?.at]);
+      if (key !== this.directionKey) {
         this.store.saveDirection(this.selection.epoch, director.state, now);
-        this.directionKey = key; this.lastSave = now;
+        this.directionKey = key;
+        this.lastSave = now;
+      } else if (now - this.lastSave >= 1000) {
+        this.store.directionHeartbeat(this.selection.epoch, now);
+        this.lastSave = now;
       }
       if (director.state.held) {
         if (previous?.state === "hold") return previous;

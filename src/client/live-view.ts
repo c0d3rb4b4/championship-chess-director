@@ -16,7 +16,7 @@ export function liveView(s: RealProgramme): BoardProgramme {
     engines.push({ id, name: id === "sesse" ? "Stockfish" : "Leela", source: id === "sesse" ? "Sesse" : "LCZero",
       score: a.whiteScore ?? "", scoreLabel: "White evaluation", status: a.progress?.ready ? "Ready" : "Provisional",
       depth: a.depth, pawns: a.pawns, wdl: a.wdl, candidates: a.candidates ?? (a.line.length ? [{ moves: a.line, depth: a.depth }] : []),
-      work: a.work, workUnit: id === "sesse" ? "nodes" : "visits", workDelta: a.progress?.delta, visitShares: a.visitShares });
+      work: a.work, workCandidate: id === "leela" ? a.line[0] : undefined, workUnit: id === "sesse" ? "nodes" : "visits", workDelta: a.progress?.delta, visitShares: a.visitShares });
   }
   const fen = p.startFen.split(" ");
   return { mode: "REAL", real: s, sequence: s.sequence, presentationMs: 0, connected: true,

@@ -15,7 +15,7 @@ async function run() {
   const db = new DatabaseSync(app.dbPath, { readOnly: true });
   const hash = createHash("sha256");
   const scenes: Record<string, number> = {};
-  const resources: object[] = [];
+  const resources: { at: number; rss: number; heapUsed: number; rows: number; sqliteBytes: number; walBytes: number }[] = [];
   const rolling: boolean[] = [];
   let minimumLargeShare = 1;
   const moves = ["e4","e5","Nf3","Nc6","Bb5","a6","Ba4","Nf6","O-O","Be7","Re1","b5","Bb3","d6",
@@ -56,13 +56,15 @@ async function run() {
       if (at % 600000 === 0) {
         const rows = Number(db.prepare("SELECT count(*) AS n FROM feed_events").get()!.n);
         peakRows = Math.max(rows, peakRows);
-        resources.push({ at, rss: process.memoryUsage.rss(), rows, sqliteBytes: (await stat(app.dbPath)).size,
+        const { rss, heapUsed } = process.memoryUsage();
+        resources.push({ at, rss, heapUsed, rows, sqliteBytes: (await stat(app.dbPath)).size,
           walBytes: (await stat(app.dbPath + "-wal")).size });
       }
     }
     assert.ok(interval && sawGap && sawRecovery && scenes.spotlight > 0 && scenes.replay > 0 && (scenes.pending ?? 0) + (scenes.waiting ?? 0) > 0);
     assert.ok(worstDriftMs <= 1000, `clock drift ${worstDriftMs} ms`);
     assert.ok(minimumLargeShare >= .7);
+    if (!elapsed) assert.ok(Math.max(...resources.map(r => r.rss)) < 512 * 1024 * 1024, "Fixture process exceeded 512 MiB");
     assert.ok(peakRows < 600, `compaction retained ${peakRows} rows`);
     return { timelineMs: eightHours, elapsedMs: Math.round(performance.now()-started), accelerated: !elapsed, restarts,
       socketGenerations: app.generations, minimumLargeShare, worstDriftMs, peakRows, resources, scenes, digest: hash.digest("hex") };

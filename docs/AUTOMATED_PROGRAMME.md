@@ -4,7 +4,7 @@
 
 ## Starting point after G5
 
-[PR #24](https://github.com/c0d3rb4b4/championship-chess-director/pull/24) completed selection, waiting, live move delivery, finished-game replay and rehearsal. The remaining visible gap is **during play**. In that revision, `Broadcast.activate()` constructs `Director` for DEMO, while `realSnapshot()` has a waiting cursor and a finished recap cursor but no live scene cursor. The real renderer can show the last move and matching engine lines indefinitely. The demo demonstrates the intended pacing and motion. Its scripted moves, clocks and search samples belong only to rehearsal.
+[PR #24](https://github.com/c0d3rb4b4/championship-chess-director/pull/24) completed selection, waiting, live move delivery, finished-game replay and rehearsal. The G5 gap was **during play**. In that revision, `Broadcast.activate()` constructs `Director` for DEMO, while `realSnapshot()` has a waiting cursor and a finished recap cursor but no live scene cursor. The real renderer can show the last move and matching engine lines indefinitely. The demo demonstrates the intended pacing and motion. Its scripted moves, clocks and search samples belong only to rehearsal.
 
 ## What a viewer should see
 
@@ -19,9 +19,9 @@
 
 The server owns scene selection and timing even when there are no clients. Keep added programme delay at its existing default of zero. For any configured delay, apply the same release rule to the board, analysis, clocks, panel exits and every viewer. The 500 ms target starts at eligibility on this timeline. Source transmission and polling latency are measured separately. An optional layout pin yields to a move. Explicit emergency HOLD is a producer override with a visible state and a deliberate resume.
 
-## Remaining development
+## Software checkpoints
 
-Use these checkpoints together in an all-development run. The [original milestones](PHASED_PLAN.md#sequence-and-dependencies) track release evidence. External observations can stay open while independent engineering proceeds. Update the status and evidence here as work lands.
+The [implementation PR](https://github.com/c0d3rb4b4/championship-chess-director/pull/26) covers all five checkpoints. The [original milestones](PHASED_PLAN.md#sequence-and-dependencies) track release evidence. External observations can stay open while independent engineering proceeds. Update the status and evidence here as work lands.
 
 | Checkpoint | Software status | Implementation and proof |
 |---|---|---|
@@ -47,7 +47,7 @@ Use these checkpoints together in an all-development run. The [original mileston
 Paste this into a fresh project chat after the documentation PR merges. Reuse the same prompt to resume an open implementation PR.
 
 ```text
-@GitHub Use c0d3rb4b4/championship-chess-director. Complete all remaining development in docs/AUTOMATED_PROGRAMME.md against current main. Read the repo instructions, design, PRD, provider contracts, original milestones and G1–G5 evidence. Inspect merged and open PRs. Reuse an existing implementation branch if present. Work through every unfinished software checkpoint in this run.
+@GitHub Use c0d3rb4b4/championship-chess-director. Complete all remaining development in docs/AUTOMATED_PROGRAMME.md against current main. Read the repo instructions, design, PRD, provider contracts, original milestones and G1–G5 evidence. Inspect merged and open PRs. Reuse an existing implementation branch if present. Work through every unfinished software checkpoint in this run. If the table is implemented on main, report the verification and remaining external checks.
 
 After one Take Game action in /operator, /programme must run unattended even with the operator tab closed. Cycle all eligible graphics from real released data, including useful PGN-only graphics when both engines are absent. Play settled engine lines automatically during long thinks. Every released live move interrupts any graphic or animation in one update, shows the correct actual board within 500 ms of eligibility, and resumes the cycle automatically. Follow the plan for delay, pressure, result, corrections, recovery and optional overrides. Keep demo explicit.
 

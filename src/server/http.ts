@@ -29,6 +29,7 @@ export function createBroadcastServer(options: {
     throw error;
   }
   function broadcast() {
+    if (!clients.size) return;
     const current = output.current;
     const data = `id: ${current.sequence}\nevent: snapshot\ndata: ${JSON.stringify(current)}\n\n`;
     for (const client of clients) {

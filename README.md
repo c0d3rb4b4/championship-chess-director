@@ -74,7 +74,7 @@ Run the app on the same machine as OBS, then:
 2. Leave **Local file** off. Set **URL** to `http://127.0.0.1:3000/programme`.
 3. Set **Width** to **1920**, **Height** to **1080**, enable **Use custom frame rate**, and set **FPS** to **30**.
 4. Leave **Shutdown source when not visible** and **Refresh browser source when scene becomes active** unchecked. These settings preserve continuity when changing scenes.
-5. Fit the source to the scene. Keep `/operator` open in your normal browser and rehearse an interruption. Check a 1080p capture and a 720p preview. Mix any music separately; the application is silent.
+5. Fit the source to the scene. Take the round in your browser and close the control room during the unattended rehearsal. Check a 1080p capture and a 720p preview. Mix any music separately; the application is silent.
 
 The property names and their effects are documented in [OBS Browser Source](https://obsproject.com/kb/browser-source). The application needs no OBS control permissions. Actual OBS capture performance has not yet been benchmarked.
 
@@ -95,7 +95,7 @@ The Chromium tests drive the actual operator buttons and two programme viewers. 
 
 The persistent Node/TypeScript server owns chess rules, a deterministic director, a SQLite WAL checkpoint/command journal and a shared ordered SSE stream. The browser renders validated board frames; it schedules no variation timers. Fixture score meanings and full history bindings are explicit. See [slice architecture and limits](docs/DEMO_SLICE.md) and [fixture contract](fixtures/README.md).
 
-The real selector, continuous delayed feed, finished-game rundown, and pre-game countdown and replay implement game-day G1 through G4. G5 adds the [match-day rehearsal and release record](docs/evidence/game-day-g5/README.md). Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production WDL is disabled pending in-play verification.
+The real selector, continuous delayed feed, finished-game rundown, and pre-game countdown and replay implement game-day G1 through G4. G5 adds the [match-day rehearsal and release record](docs/evidence/game-day-g5/README.md). The [unattended programme](docs/AUTOMATED_PROGRAMME.md) adds the live director, producer profiles, HOLD and accelerated endurance verification. Operator commands are local and same-origin. The release record lists the remaining production-field and host checks.
 
 - [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
 - [Game-day implementation plan and repeatable prompt](docs/GAME_DAY_PLAN.md) for choosing real championship games, countdowns, replays and post-game statistics.
@@ -109,6 +109,6 @@ The real selector, continuous delayed feed, finished-game rundown, and pre-game 
 | On-air labels, score layout or transitions | `src/client/app.ts`, `src/client/styles.css` | Compare the three scenes in the browser evidence. Confirm the opponent’s clock, actual move list and board identity at 720p. |
 | Board rendering or highlighting | `src/client/board.ts` | Verify both actual and hypothetical boards against their own FEN and from/to squares. |
 | Engine fixture or score meaning | `fixtures/`, `src/server/fixtures.ts`, `src/server/director.ts` | Replay every PV from its bound root. Check candidate depths and the order and units of the outcome tuple. |
-| Scene timing or interruption | `src/server/director.ts` and `tests/director.test.ts` | Drive the injected clock either side of the boundary; an authoritative move wins a tie with a PV step. |
+| Scene timing or interruption | `src/server/live-director.ts`, `tests/unattended.test.ts` and `tests/browser/unattended.spec.ts` | Drive the injected clock either side of the boundary; an authoritative move wins a tie with a PV step. |
 
 The product requirements define what the audience sees. The design records the data and timing contracts. The plan breaks remaining work into reviewable changes. The [demo guide](docs/DEMO_SLICE.md) describes what this checkout can demonstrate today.

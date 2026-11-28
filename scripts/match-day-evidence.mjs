@@ -22,6 +22,13 @@ function media(file, width, height) {
       (file.endsWith(".mp4") && (video.codec_name !== "h264" || !(Number(video.duration) > 0)))) {
     throw Error(`Unexpected media format for ${file}`);
   }
+  if (file.startsWith("videos/auto-")) {
+    // Chromium can encode an 800px trace frame in the corner of a nominal 720p video.
+    // The programme canvas is dark all the way to its lower-right edge.
+    const corner = execFileSync("ffmpeg", ["-v","error","-ss","0.2","-i",join(directory,file),"-frames:v","1",
+      "-vf","crop=4:4:iw-4:ih-4,scale=1:1","-pix_fmt","rgb24","-f","rawvideo","-threads","1","pipe:1"]);
+    if (corner.length !== 3 || Math.max(...corner) > 70) throw Error(`Incomplete programme viewport in ${file}`);
+  }
   return `[${file.split("/").pop()}](${file})`;
 }
 

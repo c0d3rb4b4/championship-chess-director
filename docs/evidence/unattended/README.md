@@ -4,7 +4,7 @@ Take a championship round in `/operator`, leave `/programme` open, then close th
 
 ## Repeatable checks
 
-The **Provider simulation screenshots** workflow runs on PRs into main and on the merge. Download the artifact named for the tested SHA and open `MATCH-DAY.md`. It links the 1080p and 720p comparison, game totals and spotlight stills, the four silent rotation, entrance, return and interrupt MP4s, and per-surface release measurements.
+The [PR #26 checks](https://github.com/c0d3rb4b4/championship-chess-director/pull/26/checks) include verification and **Provider simulation screenshots**. The capture workflow runs on PRs into main and on the merge. Download the artifact named for the tested SHA and open `MATCH-DAY.md`. It links the 1080p and 720p comparison, game totals and spotlight stills, the four silent rotation, entrance, return and interrupt MP4s, and per-surface release measurements.
 
 | Scenario | Check |
 |---|---|
@@ -12,6 +12,8 @@ The **Provider simulation screenshots** workflow runs on PRs into main and on th
 | Release deadline | Eleven cases at D=0 and D=60. Release during move emphasis, each of seven panels, spotlight entrance, PV playback and exit. Inspect the old position just before eligibility. Check first correct FEN, turn, played SAN, stale analysis, move tint and automatic resumption on two foreground Chromium viewers and the preview. `interrupt-D0.json` and `interrupt-D60.json` report milliseconds from advancing the eligible server clock to two animation frames after the correct board. |
 | Recovery and overrides | Cover pin then move, invalid cadence, duplicate commands, HOLD during new data, restart in HOLD, delay refill, missing journal row, skipped observation interval and restart during buffered PV playback. The existing game-day suites cover correction, result withdrawal, switch, result arriving with a move and deterministic finished-game replay. |
 | Endurance | `npm run test:endurance` runs the same eight hours of fixture time twice. The trace covers a classical game, rapid play, provider outage, restart, result, replay and a between-games interval. The report records elapsed wall time, scene durations, minimum rolling five-minute large-board share, clock error against accepted PGN anchors, SQLite/WAL sizes, journal rows, process RSS and socket generations. The scene, position and statistics digests must agree. Use `npm run test:endurance -- --elapsed` for a wall-paced eight-hour rehearsal. |
+
+The local three-surface matrix recorded a maximum of **97 ms at zero delay** and **108 ms at 60 seconds**. The paired eight-hour runs had matching scene/position/statistics digests. The five-minute minimum large-board share was **88%**, observed clock error was **0 ms** against the accepted fixture anchors, and the sampled journal peaked at **149 rows**. The capture job publishes measurements for each tested revision.
 
 All published media use original fixture traffic at the upstream boundary. The accelerated endurance run does not measure OBS or eight hours of elapsed host time.
 

@@ -83,7 +83,8 @@ export function followAnalysis(selected: CatalogueGame, game: Game, signal: Abor
       for (const row of Array.isArray(body.positions) ? body.positions : []) {
         if (row.gameId !== selectedId || !Number.isInteger(row.ply) || row.ply < 0 || row.ply >= expected.length) continue;
         const position = expected[row.ply];
-        if (!providerFenMatches(row.fen, position.fen, position.doublePush) ||
+        if (!("fen" in row) && !matched.has(row.ply)) continue;
+        if (("fen" in row && !providerFenMatches(row.fen, position.fen, position.doublePush)) ||
             (row.ply && row.moveUci !== undefined && row.moveUci !== position.uci)) {
           matched.clear();
           verifiedWdl = undefined;
@@ -113,9 +114,12 @@ export function followAnalysis(selected: CatalogueGame, game: Game, signal: Abor
         // The binding fixes the initial position. A lone target FEN cannot prove a transposed history.
         if (best.nodes !== undefined) value.work = best.nodes;
         const sum = candidates.reduce((n, c) => n + (c.nodes ?? NaN), 0);
-        if (binding.leelaFields?.evaluationVisits && total && sum <= total)
-          value.visitShares = [...candidates.map(c => ({ san: c.pv[0], percent: c.nodes! * 100 / total! })),
-            { san: "Other", percent: (total - sum) * 100 / total }];
+        if (binding.leelaFields?.evaluationVisits && total && sum <= total) {
+          const named = [...candidates].sort((a, b) => b.nodes! - a.nodes!).slice(0, 3);
+          const shown = named.reduce((n, c) => n + c.nodes!, 0);
+          value.visitShares = [...named.map(c => ({ san: c.pv[0], percent: c.nodes! * 100 / total! })),
+            { san: "Other", percent: (total - shown) * 100 / total }];
+        }
       }
       report("leela", value?.historyVerified ? value : null, body);
     });

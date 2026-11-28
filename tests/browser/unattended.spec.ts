@@ -3,6 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { Chess } from "chess.js";
 import { rehearsal, type Feeds } from "../support/unattended.js";
 
+// Keep the full-viewport recorder in control of Chromium's screencast resolution.
+test.use({ trace: { mode: "retain-on-failure", screenshots: false } });
 const directory = "test-results/provider-screenshots/unattended";
 const times = [0,3,6,12,26,44,64,75,77,79,95,97,110,115,135,155].map(t => t * 1000);
 async function take(operator: Page, base: string, id: string) {
@@ -152,4 +154,33 @@ for (const delay of [0,60000]) test(`all released in-play graphics yield on thre
     await mkdir(directory,{recursive:true});
     await writeFile(`${directory}/interrupt-D${delay/1000}.json`,JSON.stringify(records,null,2));
   } finally { await Promise.all(browsers.map(b=>b.close())); await operator.close(); await app.close(); }
+});
+
+test("operator overrides persist and a second take inherits the imported cadence", async ({ page }) => {
+  const app = await rehearsal(0, "pgn");
+  try {
+    await take(page, app.base, app.game.id);
+    await app.tick(0);
+    await page.locator("#direction-controls summary").click();
+    await page.getByRole("button", {name:"Export profile"}).click();
+    const editor = page.getByLabel("Cadence profile (JSON)");
+    const profile = JSON.parse(await editor.inputValue());
+    profile.cooldownMs = 105000;
+    await editor.fill(JSON.stringify(profile));
+    const importButton = page.getByRole("button", {name:"Import profile"});
+    await importButton.click();
+    await expect(page.getByRole("status")).toHaveText("Direction command accepted.");
+    await page.getByRole("button",{name:"Emergency HOLD"}).click();
+    const preview = page.frameLocator("iframe").getByTestId("programme");
+    await expect(preview).toHaveAttribute("data-state","hold");
+    app.score(["e4","e5"]); await app.tick(1000);
+    await expect(preview.getByTestId("actual-board")).toHaveCount(0);
+    await page.getByRole("button",{name:"Resume programme"}).click();
+    await expect(preview.locator(".played-moves b")).toHaveText(["e4","e5"]);
+    await take(page,app.base,app.game.id);
+    await page.reload();
+    await page.locator("#direction-controls summary").click();
+    await page.getByRole("button",{name:"Export profile"}).click();
+    expect(JSON.parse(await editor.inputValue()).cooldownMs).toBe(105000);
+  } finally { await app.close(); }
 });

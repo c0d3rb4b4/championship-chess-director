@@ -33,6 +33,7 @@ export interface EngineView {
   work?: number;
   workUnit?: "nodes" | "visits";
   workDelta?: number;
+  workCandidate?: string;
   visitShares?: { san: string; percent: number }[];
   conditionalSan?: string;
   candidates: Candidate[];

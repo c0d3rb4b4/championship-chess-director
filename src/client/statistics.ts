@@ -59,7 +59,7 @@ export function statisticsPanel(s: BoardProgramme, outcome: (v: [number,number,n
   } else if (s.panel === "time") body = timePanel(s);
   else if (s.panel === "search") {
     body = `<h2>Search progress</h2>${s.engines.map(engine =>
-      `<section class="work"><h3>${e(engine.name)}</h3>${engine.workUnit && engine.work !== undefined ?
+      `<section class="work"><h3>${e(engine.name)}${engine.workCandidate ? " · " + e(engine.workCandidate) : ""}</h3>${engine.workUnit && engine.work !== undefined ?
         `<p><strong>${number(engine.work)}</strong> ${engine.workUnit} ${engine.depth !== undefined ? `<span>Depth ${engine.depth}</span>` : ""}</p>
         ${engine.workDelta !== undefined ? `<small>Last increase &nbsp; +${number(engine.workDelta)} ${engine.workUnit}</small>` : ""}
         ${engine.visitShares ? `<div class="shares">${engine.visitShares.map(v => `<span>${e(v.san)} &nbsp;${number(v.percent)}%</span>`).join("")}</div>` : ""}` : "<p>Updating for this position</p>"}</section>`).join("")}`;
