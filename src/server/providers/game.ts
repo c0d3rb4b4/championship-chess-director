@@ -48,7 +48,7 @@ export function decodeGame(
   }
   const recorded = verifiedElapsed ? elapsedTimes(game) : [];
   const control = binding.timeControl;
-  const elapsed = control && binding.clockConvention === "post-move" ? game.history({ verbose: true }).map((move, index, moves) => {
+  const elapsed = clocks.length && control && binding.clockConvention === "post-move" ? game.history({ verbose: true }).map((move, index, moves) => {
     const supplied = recorded.find(row => row.ply === index + 1);
     if (supplied) return supplied;
     const fullMove = Number(move.before.split(" ")[5]);
@@ -62,7 +62,7 @@ export function decodeGame(
   return {
     white: h.White, black: h.Black, clocks, ...(anchors && { anchors }), binding: { ...binding }, moves, fen: game.fen(), result,
     ...(opening && { opening }),
-    ...(elapsed?.length && { elapsed }),
+    ...(elapsed?.some(row => row.elapsedMs !== null) && { elapsed }),
     ...(clock && { clockAnnotation: {
       ...clock, ply: moves.length, san: moves[moves.length - 1], mover: game.turn() === "b" ? "white" : "black",
     } }),

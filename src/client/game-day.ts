@@ -88,7 +88,7 @@ function liveGame(s: RealProgramme, connected: boolean) {
       ? '<strong class="replay-tag">REPLAY</strong>'
       : `<strong>${final && recap && recap.page !== "result" ? `Final score · ${e(resultLabel(final))}`
         : final ? "Final result" : "Game in progress"}</strong>`}</header>
-    <div class="live-board-stack">${livePlayer(game, "black", playback ? undefined : position.clocks?.blackMs)}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${livePlayer(game, "white", playback ? undefined : position.clocks?.whiteMs)}</div>
+    <div class="live-board-stack">${livePlayer(game, "black", playback ? undefined : position.clocks?.blackMs)}${playback ? board(playback.frame, "replay") : `<div class="final-actual-board">${board(position.actual, "actual")}</div>`}${livePlayer(game, "white", playback ? undefined : position.clocks?.whiteMs)}</div>
     <article class="live-sheet"><h1>${e(game.label)}</h1>
       ${recap ? finishedPanel(s, resultLabel, startLabel) : `<section class="live-lead"><p>${final ? "Final result" : "Last move"}</p>
         <h2>${e(final ? resultLabel(final) : lastMoveLabel(summary))}</h2>
@@ -97,7 +97,7 @@ function liveGame(s: RealProgramme, connected: boolean) {
       ${recent ? `<section class="live-notation"><h3>Played moves</h3><ol>${recent}</ol></section>` : ""}
       ${analysis}`}
       ${s.interrupted && !recap ? '<p class="authority-gap">Game feed interrupted</p>' : ""}
-    </article><div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED</div></main>`;
+    </article>${recap ? '<div class="panel-timer" aria-hidden="true" hidden><i></i></div>' : ""}<div class="connection-banner" ${connected ? "hidden" : ""}>CONNECTION INTERRUPTED</div></main>`;
 }
 
 export function waitingHeadline(s: RealProgramme): string {

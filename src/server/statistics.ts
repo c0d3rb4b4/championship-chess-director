@@ -53,15 +53,17 @@ export function workProgress(samples: Sample[]) {
 export const ordinaryProfile: readonly [Panel, number][] = [
   ["comparison", 20000], ["outcomes", 18000], ["time", 20000], ["search", 16000], ["history", 20000],
 ];
-export function selectPanel(elapsed: number, eligible: Set<Panel>, profile = ordinaryProfile): Panel {
+export function panelSlot(elapsed: number, eligible: Set<Panel>, profile = ordinaryProfile) {
   if (profile.some(([, ms]) => !Number.isSafeInteger(ms) || ms <= 0))
     throw new Error("Invalid panel duration");
   const slots = profile.filter(([panel]) => eligible.has(panel));
-  if (slots.length < 2) return "comparison";
+  if (slots.length < 2) return;
   let phase = Math.max(0, elapsed) % slots.reduce((sum, [, ms]) => sum + ms, 0);
   for (const [panel, ms] of slots) {
-    if (phase < ms) return panel;
+    if (phase < ms) return { panel, startMs: elapsed - phase, endMs: elapsed - phase + ms };
     phase -= ms;
   }
-  return "comparison";
+}
+export function selectPanel(elapsed: number, eligible: Set<Panel>, profile = ordinaryProfile): Panel {
+  return panelSlot(elapsed, eligible, profile)?.panel ?? "comparison";
 }

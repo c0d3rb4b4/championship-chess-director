@@ -17,6 +17,8 @@ The local three-surface matrix recorded a maximum of **97 ms at zero delay** and
 
 All published media use original fixture traffic at the upstream boundary. The accelerated endurance run does not measure OBS or eight hours of elapsed host time.
 
+The observations below record the original implementation rehearsal. The [current on-air field contracts](../../PROVIDER_CONTRACTS.md#on-air-championship-fields) supersede its initial clock and root-outcome gates.
+
 ## Deployed Game 4 observations · 28 November 2026 UTC
 
 | Check | Observation |

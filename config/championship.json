@@ -3,6 +3,13 @@
   "eventName": "FIDE World Chess Championship 2026",
   "timeZone": "Europe/Zurich",
   "scheduleSource": "https://worldchampionship.fide.com/schedule",
+  "classicalRounds": {
+    "throughOrder": 14,
+    "clockConvention": "post-move",
+    "roundClock": true,
+    "timeControl": {"startingMs": 7200000, "incrementMs": 30000, "incrementFromMove": 41, "bonuses": [{"afterMove": 40, "ms": 1800000}]},
+    "leelaFields": {"rootWdl": true}
+  },
   "games": [
     {
       "id": "game-1",

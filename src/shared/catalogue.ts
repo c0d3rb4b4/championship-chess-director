@@ -19,6 +19,7 @@ export interface RoundBinding {
   sessePlayers?: { white: string; black: string };
   timeControl?: TimeControl;
   clockConvention?: "post-move";
+  roundClock?: true;
   leelaFields?: { rootWdl?: true; evaluationVisits?: true };
   elapsedTime?: "pgn-emt";
 }

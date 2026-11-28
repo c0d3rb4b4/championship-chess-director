@@ -528,3 +528,28 @@ p {
 #direction-controls .selection-actions { flex-wrap: wrap; }
 .programme-header .event p span:empty { display: none; }
 .live-player time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.panel-timer {
+  position: absolute;
+  left: 912px;
+  right: 48px;
+  top: 966px;
+  height: 4px;
+  background: #383936;
+  overflow: hidden;
+  pointer-events: none;
+}
+.live-round .panel-timer { left: 988px; right: 58px; top: auto; bottom: 36px; }
+.panel-timer[hidden] { display: none; }
+.panel-timer i { display: block; height: 100%; background: #bcbdb2; transform-origin: left; transform: scaleX(0); }
+.programme[data-scene="spotlight"] .panel-timer { left: 600px; }
+.actual-board-wrap, .final-actual-board { position: relative; }
+.move-cue-ring {
+  display: none;
+  position: absolute;
+  inset: 0;
+  border: 5px solid #e03831;
+  will-change: opacity;
+  pointer-events: none;
+}
+.programme[data-move-cue] .move-cue-ring { display: block; }

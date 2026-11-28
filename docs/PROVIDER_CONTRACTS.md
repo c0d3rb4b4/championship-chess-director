@@ -1,6 +1,6 @@
 # Phase 3 provider replay
 
-Game 4 now has private in-play samples on two shared roots and recovery for all three transports. Clock convention, Leela calibration and partial-field verification remain open. [Game 4 private capture report](evidence/unattended/README.md#deployed-game-4-observations--28-november-2026-utc) Use the [deployment recorder](#record-a-deployed-round) to collect those observations. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
+Game 4 now has private in-play samples on two shared roots and recovery for all three transports. The current classical-round clock and root outcome contracts are described below. Candidate visit-share accounting remains open. [Game 4 private capture report](evidence/unattended/README.md#deployed-game-4-observations--28-november-2026-utc) Use the [deployment recorder](#record-a-deployed-round) to collect those observations. The [Game 3 deployment replay](#observed-deployment-replay--27-november-2026-utc) records verified identities and observed wire formats.
 
 At the initial offline checkpoint on 26 November 2026 the deployment endpoints could not be reached for a packet capture from the development host. No event PGN endpoint or verified event-to-provider game mapping was configured. The checked-in example is original synthetic data. At that checkpoint the production event, round, deployed revisions, capture dates and redistribution permissions were unverified.
 
@@ -15,11 +15,19 @@ The example reconstructs 1.e4, a Sesse principal line of 1…e5 with a +0.25 Whi
 
 | Input | Evidence used for this implementation | Limits until deployment replay |
 |---|---|---|
-| Event PGN | Explicit authority and provider game ID plus PGN Event, Round, WhiteFideId, BlackFideId, initial FEN and legally replayed moves. An explicit game result can end a game. | The Game 3 replay verified provider IDs, colour assignments and PGN dialect. Enable production clocks after confirming the post-move convention in play. |
+| Event PGN | Explicit authority and provider game ID plus PGN Event, Round, WhiteFideId, BlackFideId, initial FEN and legally replayed moves. An explicit game result can end a game. | The Game 3 replay verified provider IDs, colour assignments and PGN dialect. The classical-round profile supplies the verified post-move convention and staged control. |
 | Sesse | The public remoteglot mirror's client (blob d1457179), server (22bc20d3) and producer (52eae900) describe versioned long polls, JSON-delta stanzas, SAN PVs, individual line depths and White-oriented scores. | Verify wire dialect, bound markers and deployment version. The producer must verify the mapping to this event and round before replay. The decoder additionally compares player names, history and FEN. A missing base or invalid patch requires a full snapshot. |
-| Leela | PRD S3/S4 at 1e4207ed and backend/ws_notifier.py define game subscriptions, position FEN and ply, evaluation IDs, and UCI variations. Some historical variations carry only nodes. | The Game 3 replay verified mapping, White-oriented per-mille WDL and the archived visit denominator. Unidentified historical variations supply no candidate. Candidate nodes are retained per evaluation. In-play partial updates and exact deployed calibration settings still need verification. Percentages stay disabled. |
+| Leela | PRD S3/S4 at 1e4207ed and backend/ws_notifier.py define game subscriptions, position FEN and ply, evaluation IDs, and UCI variations. Some historical variations carry only nodes. | The Game 3 replay verified mapping, White-oriented per-mille WDL and the archived visit denominator. Unidentified historical variations supply no candidate. Candidate nodes are retained per evaluation. The programme now shows verified deep root WDL. Partial candidate visit accounting stays gated. |
 
 [Remoteglot source mirror](https://github.com/madnight/remoteglot) · [Pinned Leela server](https://github.com/LeelaChessZero/lczero-live/blob/1e4207edb40a7b07079b20e8194f20e1a2a278ba/backend/ws_notifier.py)
+
+## On-air championship fields
+
+The fourteen classical rounds use the published 120 minutes for the first forty moves, a 30-minute addition after each player's 40th move, and a 30-second increment from move 41. The Lichess PGN attaches `%clk` to the mover. The programme reconstructs completed think times from each player's consecutive anchors and the stage boundary. Missing or invalid observations leave gaps. [FIDE regulations, section 4.2.2](https://handbook.fide.com/files/handbook/FWCM2026.pdf) · [PGN clock convention, section 4.2](https://www.enpassant.dk/chess/palview/enhancedpgn.htm)
+
+For a cold take, the public Lichess round-status endpoint supplies both players' clocks in centiseconds and an elapsed `thinkTime` in seconds. The programme checks round and chapter, result, FEN, last UCI move, colours, FIDE IDs and both PGN clock anchors. A subsequent unchanged PGN confirms the reading. A delayed response, a move or a correction cannot activate a clock on a different root. PGN polling continues during this lookup. A bound running clock permits a settled long-think variation under the existing pressure and cooldown rules. [Public round status](https://lichess.org/api/broadcast/-/-/wIwJtPqz)
+
+Leela's published deep position fields `scoreW`, `scoreD` and `scoreB` give White win, draw and Black win in per mille. The serving client displays each divided by ten. The programme presents that provider estimate after verifying the legal mainline, root and complete tuple. Exact backend calibration parameters are unnecessary to reproduce the displayed values. Candidate outcomes, the separate one-minute search, and candidate visit shares have different meanings. The championship enables only root WDL. [Provider explanation](https://lczero.org/blog/2026/11/lczero-live-analysis-for-wcc-2026/) · [Serving client](https://live.lczero.org/dist/main.js?98ff2cb0c3c0e80a83f87fa1eb90cb9e42dc191e)
 
 ## Production evidence to collect on the feed host
 
@@ -146,7 +154,7 @@ A 70-second Game 3 recording beginning at 06:51 UTC collected 14 packets. Two re
 | 119 | 2804474 | 1,126,635 | 1,126,635 | 0 |
 | 120 | 2804473 | 1,022,491 | 1,022,491 | 0 |
 
-On plies 119 and 120, weighting the candidate WDL by visits reproduced the root tuple after rounding. Plies 79 and 80 establish that the display can omit visits while retaining the larger evaluation denominator. These are archive observations. In-play updates across a shared move, clock comparison, and same-evaluation aggregation on live partial frames remain open. Normalised replay and the programme continue to omit unverified production WDL and search share.
+On plies 119 and 120, weighting the candidate WDL by visits reproduced the root tuple after rounding. Plies 79 and 80 establish that the display can omit visits while retaining the larger evaluation denominator. These are archive observations. In-play updates across a shared move, clock comparison, and same-evaluation aggregation on live partial frames remain open. The archive recorder retains its original field gates. See the current on-air championship contract above for live root WDL.
 
 Private SHA-256 digests. Three-feed recording `e438fa980a3bcfe48cd37356e7bfbddb565757aac171cef23ef7b3d66e4d9356`. Archived Leela subscriptions `ab7339d15f9b129ea126de3fd59add993b93fe2d007c372beb596d9adc62d80e`.
 
@@ -163,9 +171,9 @@ Keep deployed recordings private until the relevant redistribution terms are con
 
 ## Finished-game evidence
 
-The recap uses the accepted mainline, a sourced PGN Opening tag when present, and eligible exact-root engine observations recorded during the selection. An analysis at the final root alone cannot produce a historical chart. Leela probabilities remain disabled in the deployed adapter.
+The recap uses the accepted mainline, a sourced PGN Opening tag when present, and eligible exact-root engine observations recorded during the selection. An analysis at the final root alone cannot produce a historical chart. Eligible historical Leela samples use the same verified deep root probabilities as the live picture.
 
-A round whose source has verified per-move elapsed-time annotations can set `binding.elapsedTime` to `"pgn-emt"`. This requests PGN comments and reads one `[%emt H:MM:SS]` annotation per mainline position. The checked-in championship bindings leave it unset. Until clock convention and time-control evidence are established, archived `%clk` fields cannot generate production move durations.
+A round whose source has verified per-move elapsed-time annotations can set `binding.elapsedTime` to `"pgn-emt"`. This requests PGN comments and reads one `[%emt H:MM:SS]` annotation per mainline position. The checked-in championship bindings leave it unset. The classical profile derives durations from recorded `%clk` anchors and the official time control.
 
 ## In-play screenshot simulation
 

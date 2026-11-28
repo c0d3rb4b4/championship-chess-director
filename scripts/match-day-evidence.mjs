@@ -35,6 +35,7 @@ function media(file, width, height) {
 for (const [label, stem] of [
   ["Countdown with previous replay", "g4/waiting-ply-2"],
   ["Countdown without predecessor", "g4/game-1-no-predecessor"],
+  ["Released move border and panel timer", "unattended/move-cue"],
   ["Unattended comparison", "unattended/comparison"],
   ["Unattended game in numbers", "unattended/numbers"],
   ["Settled live variation", "unattended/spotlight"],
@@ -49,7 +50,7 @@ for (const [label, stem] of [
 }
 
 report.push("", "## Silent transitions", "");
-for (const name of ["auto-rotation", "auto-entrance", "auto-return", "auto-interrupt", "g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
+for (const name of ["auto-rotation", "auto-entrance", "auto-return", "auto-interrupt", "auto-move-cue", "g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
   report.push("- " + media(`videos/${name}-720p.mp4`, 1280, 720));
 }
 

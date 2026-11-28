@@ -30,6 +30,7 @@ function binding(value: unknown): RoundBinding | null {
   const fields = b.leelaFields === undefined ? undefined : record(b.leelaFields, "Leela field contracts");
   if (fields && Object.entries(fields).some(([k, v]) => !["rootWdl", "evaluationVisits"].includes(k) || v !== true))
     throw Error("Invalid Leela field contract");
+  if (b.roundClock !== undefined && (b.roundClock !== true || b.clockConvention !== "post-move")) throw Error("Invalid round clock contract");
   const timeControl = b.timeControl as TimeControl | undefined;
   const integer = (n: unknown, min: number) => Number.isSafeInteger(n) && Number(n) >= min;
   if (timeControl !== undefined && (!timeControl || b.clockConvention !== "post-move" || !integer(timeControl.startingMs, 1) ||
@@ -38,6 +39,7 @@ function binding(value: unknown): RoundBinding | null {
       new Set(timeControl.bonuses.map(v => v.afterMove)).size !== timeControl.bonuses.length)) throw Error("Invalid verified time control");
   return {
     ...(timeControl && { timeControl }),
+    ...(b.roundClock && { roundClock: true as const }),
     ...(b.clockConvention && { clockConvention: b.clockConvention }),
     ...(fields && { leelaFields: fields }),
     ...(aliases && { sessePlayers: { white: string(aliases.white, "Sesse White"), black: string(aliases.black, "Sesse Black") } }),
@@ -51,7 +53,7 @@ function binding(value: unknown): RoundBinding | null {
 
 const stableId = /^[a-z0-9][a-z0-9_-]*$/i;
 
-function game(value: unknown): CatalogueGame {
+function game(value: unknown, defaults: Record<string, unknown>): CatalogueGame {
   const g = record(value, "game");
   if (typeof g.order !== "number" || !Number.isSafeInteger(g.order) || g.order < 1) throw Error("Invalid round order");
   const startFen = string(g.startFen, "start FEN");
@@ -69,7 +71,7 @@ function game(value: unknown): CatalogueGame {
   if (white.id === black.id) throw Error("The two player IDs must be distinct");
   return {
     id: string(g.id, "game ID", stableId), label: string(g.label, "game label"),
-    order: g.order, startFen, scheduledStart, white, black, binding: binding(g.binding),
+    order: g.order, startFen, scheduledStart, white, black, binding: binding(g.binding === null ? null : { ...defaults, ...record(g.binding, "binding") }),
   };
 }
 
@@ -80,7 +82,13 @@ export function parseCatalogue(value: unknown): Catalogue {
   const scheduleSource = string(c.scheduleSource, "schedule source");
   if (URL.parse(scheduleSource)?.protocol !== "https:") throw Error("Invalid schedule source URL");
   if (!Array.isArray(c.games) || !c.games.length) throw Error("Missing published games");
-  const games = c.games.map(game).sort((a, b) => a.order - b.order);
+  const classical = c.classicalRounds === undefined ? { throughOrder: 0 } : record(c.classicalRounds, "classical rounds");
+  const { throughOrder, ...defaults } = classical;
+  if (typeof throughOrder !== "number" || !Number.isSafeInteger(throughOrder) || throughOrder < 0)
+    throw Error("Invalid classical round count");
+  if (Object.keys(defaults).some(k => !["clockConvention","timeControl","roundClock","leelaFields"].includes(k)))
+    throw Error("Round identities must be configured individually");
+  const games = c.games.map(row => game(row, Number(row?.order) <= throughOrder ? defaults : {})).sort((a, b) => a.order - b.order);
   const ids = games.map(g => g.id);
   const orders = games.map(g => g.order);
   const chapters = games.flatMap(g => g.binding ? [g.binding.chapterId] : []);

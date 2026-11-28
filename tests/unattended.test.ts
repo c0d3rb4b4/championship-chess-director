@@ -21,6 +21,7 @@ test("protected direction, idempotent commands, delay reconciliation and cadence
     assert.equal((await (await control("pin","numbers",id)).json()).duplicate,true);
     assert.equal((await control("next",undefined,id)).status,409);
     await r.tick(40000); assert.equal((await r.snapshot()).live?.panel,"numbers");
+    assert.equal((await r.snapshot()).cues?.panel,undefined);
     r.score(["e4","e5","Nf3"]); await r.tick(41000);
     assert.equal((await r.snapshot()).live?.scene.kind,"actual-move");
     assert.equal((await control("delay",60000)).status,409);
@@ -105,4 +106,32 @@ test("field gates preserve staged bonus, increment, missing clocks and exact en-
   const game=decodeGame(binding,"a","1",'[Event "Test"]\n[Round "1"]\n[WhiteFideId "1"]\n[BlackFideId "2"]\n\n1. e4 {[%clk 0:01:50]} e5 2. Nf3 {[%clk 0:01:40]} Nc6 {[%clk 0:01:39]} *');
   assert.deepEqual(game.elapsed?.map(r=>r.elapsedMs),[10000,null,11000,null]);
   assert.equal(providerFenMatches(game.fen.replace(" - "," a3 "),game.fen,undefined),false);
+});
+
+test("the championship profile restores long-think analysis, timed moves and root WDL on a cold take", async () => {
+  const app = await rehearsal(0,"both",1,105);
+  try {
+    app.score(["e4","e5"]);
+    await app.command({command:"select-game",gameId:app.game.id,selectionEpoch:0});
+    await app.tick(0);
+    for (const t of [100,1000,4100,7200,8500]) {
+      await app.tick(t);
+      app.engine(t);
+      await app.tick(t);
+    }
+    const live = await app.snapshot();
+    assert.equal(live.position?.clockRunning,true);
+    assert.equal(live.live?.facts.white.timedMoves,1);
+    assert.equal(live.live?.facts.black.timedMoves,1);
+    assert.deepEqual(live.analysis?.leela?.wdl,[30,50,20]);
+    assert.equal(live.analysis?.leela?.visitShares,undefined);
+    assert.equal(live.live?.scene.kind,"spotlight");
+    assert.equal(live.cues?.moveAtMs,undefined);
+    assert.ok(live.cues?.panel);
+    app.score(["e4","e5","Nf3"]);
+    const moved=await app.tick(9000);
+    assert.equal(moved.live?.scene.kind,"actual-move");
+    assert.equal(moved.cues?.moveAtMs,moved.cues?.nowMs);
+    assert.equal(moved.cues!.panel!.endMs - moved.cues!.panel!.startMs,6000);
+  } finally { await app.close(); }
 });
