@@ -1,3 +1,4 @@
+import { programmeStream } from "./programme-stream.js";
 import { test, expect } from "@playwright/test";
 import { Chess } from "chess.js";
 import { board } from "../../src/client/board.js";
@@ -60,6 +61,7 @@ test("review a starting position and sparse endgame at both output sizes", async
   endgame.move("Rb1+");
   const reply = boardFrame(endgame);
   let snapshot: ProgrammeSnapshot;
+  const sendSnapshot = await programmeStream(page);
   await page.route("**/api/programme", (route) => route.fulfill({ json: snapshot }));
   for (const [name, actual, ply, moves] of [
     ["starting", boardFrame(starting), 0, []],
@@ -68,9 +70,6 @@ test("review a starting position and sparse endgame at both output sizes", async
   ] as const) {
     const compact = name === "endgame-spotlight";
     snapshot = director.advanceTo(compact ? 77000 : 6000);
-    // Keep the regular event stream for connection status, and pin the review frame
-    // above its sequence so demo events cannot replace this visual fixture.
-    snapshot.sequence = Number.MAX_SAFE_INTEGER;
     snapshot.actual = actual;
     snapshot.game = {
       ...snapshot.game,
@@ -84,6 +83,7 @@ test("review a starting position and sparse endgame at both output sizes", async
       ({ id, name, source, scoreLabel, score: "", status: "Updating for this position", candidates: [] }));
     if (compact) snapshot.scene = { ...snapshot.scene, frames: [sparse, reply], frameIndex: 1 };
     await page.goto("/programme");
+    await sendSnapshot(snapshot);
     const actualBoard = page.getByTestId("actual-board");
     const analysis = page.getByTestId("analysis-board");
     await expect(actualBoard).toHaveAttribute("data-fen", actual.fen);

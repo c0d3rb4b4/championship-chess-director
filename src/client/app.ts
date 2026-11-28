@@ -1,10 +1,14 @@
+import { authorityLabels, lastMoveLabel, realProgramme, roundStates, startLabel } from "./game-day.js";
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
 import { cutProgrammeMotion, interruptPanel, reducedMotion, revealPanel, switchSpotlight } from "./programme-motion.js";
 import type {
   Command,
   EngineView,
-  OperatorSnapshot,
+  BroadcastOperator,
+  BroadcastSnapshot,
+  RealProgramme,
+  SelectionControls,
   ProgrammeSnapshot,
 } from "../shared/types.js";
 
@@ -12,9 +16,11 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 const operator = location.pathname === "/operator";
 document.body.className = operator ? "operator-page" : "programme-page";
 document.title = operator
-  ? "Control room · Chess Director DEMO"
-  : "Programme · Chess Director DEMO";
-let latest: ProgrammeSnapshot | undefined;
+  ? "Control room · Chess Director"
+  : "Programme · Chess Director";
+let latest: BroadcastSnapshot | undefined;
+let controls: SelectionControls | undefined;
+let detailsRequest = 0;
 let renderKey = "";
 let pending = false;
 let connected = false;
@@ -226,7 +232,7 @@ function renderProgramme(s: ProgrammeSnapshot): void {
 function operatorShell(): void {
   app.innerHTML = `<main class="control-room">
     <header class="operator-header">
-      <div><span class="demo-badge">DEMO</span><h1>Control room</h1></div>
+      <div><span class="demo-badge" id="demo-label" hidden>DEMO</span><h1>Control room</h1></div>
       <div><span class="connection-status" id="connection-status">Connecting…</span>
       <a class="text-link" href="/programme" target="_blank" rel="noopener">Open programme</a></div>
     </header>
@@ -234,8 +240,8 @@ function operatorShell(): void {
       <section class="station">
         <div class="section-bar"><h2>Programme preview</h2><span>1920 × 1080</span></div>
         <div class="programme-preview"><iframe src="/programme" title="Programme preview" tabindex="-1"></iframe></div>
-        <div class="preview-caption"><strong id="director-scene">—</strong><span>Elapsed <b id="fixture-time">0:00</b></span></div>
-        <div class="cue-buttons" role="group" aria-label="Rehearsal controls">
+        <div class="preview-caption"><strong id="director-scene">—</strong><span data-rehearsal hidden>Elapsed <b id="fixture-time">0:00</b></span></div>
+        <div class="cue-buttons" data-rehearsal hidden role="group" aria-label="Rehearsal controls">
           <button data-command="restart">Restart demo</button>
           <button data-command="cue-spotlight">Cue variation</button>
           <button data-command="release-move" class="primary">Play actual move</button>
@@ -244,18 +250,32 @@ function operatorShell(): void {
         <p id="command-status" role="status" aria-live="polite"></p>
       </section>
       <aside class="inspector">
-        <section><h2>Game</h2>
+        <section class="round-controls">
+          <h2>Game selection</h2>
+          <label for="round-choice">Championship game</label>
+          <select id="round-choice" disabled><option value="">Choose a game</option></select>
+          <p class="choice-detail" id="choice-detail"></p>
+          <button class="primary" id="take-game" disabled>Take game to programme</button>
+          <div class="selection-actions">
+            <button id="enter-demo" disabled>Enter demo rehearsal</button>
+            <button id="clear-selection" disabled hidden>Clear selection</button>
+          </div>
+        </section>
+        <section><h2>On programme</h2>
           <dl class="data-rows">
             <dt>Event</dt><dd id="bound-event">—</dd>
             <dt>Round</dt><dd id="bound-round">—</dd>
             <dt>White</dt><dd id="white-player">—</dd>
             <dt>Black</dt><dd id="black-player">—</dd>
             <dt>Last move</dt><dd id="actual-position">—</dd>
+            <dt data-real hidden>Scheduled start</dt><dd data-real id="selected-start" hidden>—</dd>
+            <dt data-real hidden>Authority</dt><dd data-real id="authority-status" hidden>—</dd>
           </dl>
+          <p class="binding-diagnostic" id="binding-diagnostic" hidden></p>
         </section>
-        <section><h2>Recent moves</h2><div class="move-history" id="move-history"></div></section>
-        <section><h2>Fixture feeds</h2><dl class="data-rows" id="source-health"></dl></section>
-        <details class="diagnostics"><summary>Rehearsal details</summary>
+        <section data-rehearsal hidden><h2>Recent moves</h2><div class="move-history" id="move-history"></div></section>
+        <section data-rehearsal hidden><h2>Fixture feeds</h2><dl class="data-rows" id="source-health"></dl></section>
+        <details class="diagnostics" data-rehearsal hidden><summary>Rehearsal details</summary>
           <dl class="data-rows">
             <dt>Time control</dt><dd id="time-control">—</dd>
             <dt>Variation cue</dt><dd id="variation-time">—</dd>
@@ -276,6 +296,10 @@ function operatorShell(): void {
         () => void sendCommand(button.dataset.command as Command),
       ),
     );
+  app.querySelector("#round-choice")!.addEventListener("change", renderSelector);
+  app.querySelector("#take-game")!.addEventListener("click", () => void changeSelection("select-game"));
+  app.querySelector("#enter-demo")!.addEventListener("click", () => void changeSelection("enter-demo"));
+  app.querySelector("#clear-selection")!.addEventListener("click", () => void changeSelection("clear-selection"));
   app.querySelector("#copy-url")!.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(`${location.origin}/programme`);
@@ -287,12 +311,12 @@ function operatorShell(): void {
 }
 function setText(selector: string, value: string): void {
   const el = app.querySelector(selector);
-  if (el) el.textContent = value;
+  if (el && el.textContent !== value) el.textContent = value;
 }
 function setCommandStatus(value: string): void {
   setText("#command-status", value);
 }
-function renderOperator(s: ProgrammeSnapshot): void {
+function renderDemoOperator(s: ProgrammeSnapshot): void {
   setText("#fixture-time", shortTime(s.presentationMs));
   const key = JSON.stringify([
     s.scene.instance,
@@ -330,22 +354,134 @@ function renderOperator(s: ProgrammeSnapshot): void {
         (button.dataset.command === "release-move" && s.game.ply > 18);
     });
 }
-async function operatorDetails(): Promise<void> {
-  try {
-    const response = await fetch("/api/operator", { cache: "no-store" });
-    if (!response.ok) throw new Error("Operator diagnostics unavailable");
-    const details = (await response.json()) as OperatorSnapshot;
+function renderSelector(): void {
+  const select = app.querySelector<HTMLSelectElement>("#round-choice")!;
+  const choice = controls?.catalogue.games.find(game => game.id === select.value);
+  const ready = Boolean(connected && !pending && latest && controls &&
+    latest.selectionEpoch === controls.selectionEpoch);
+  select.disabled = !controls;
+  const take = app.querySelector<HTMLButtonElement>("#take-game")!;
+  take.disabled = !ready || !choice;
+  setText("#take-game", choice ? `Take ${choice.label} to programme` : "Take game to programme");
+  setText("#choice-detail", choice
+    ? `${choice.white.name} (White) · ${choice.black.name} (Black)\n${startLabel(choice.scheduledStart)} · ${choice.binding ? "Feed mapped" : "Feed binding pending"}`
+    : "");
+  const demo = app.querySelector<HTMLButtonElement>("#enter-demo")!;
+  demo.hidden = latest?.mode === "DEMO";
+  demo.disabled = !ready;
+  const clear = app.querySelector<HTMLButtonElement>("#clear-selection")!;
+  clear.hidden = !latest || (latest.mode === "REAL" && latest.game === null);
+  clear.disabled = !ready;
+  setText("#clear-selection", latest?.mode === "DEMO" ? "Leave demo rehearsal" : "Clear selection");
+}
+
+function renderRealOperator(s: RealProgramme): void {
+  const game = s.game;
+  setText("#director-scene", game ? `${game.label} · ${roundStates[s.state]}` : roundStates[s.state]);
+  setText("#bound-event", s.eventName);
+  setText("#bound-round", game?.label ?? "No game selected");
+  setText("#white-player", game?.white.name ?? "—");
+  setText("#black-player", game?.black.name ?? "—");
+  setText("#actual-position", (s.summary && lastMoveLabel(s.summary)) ?? "—");
+  setText("#selected-start", game ? startLabel(game.scheduledStart) : "—");
+}
+
+function renderOperator(s: BroadcastSnapshot): void {
+  if (s.mode === "DEMO") renderDemoOperator(s);
+  else renderRealOperator(s);
+  renderSelector();
+}
+
+function showMode(mode: BroadcastSnapshot["mode"]): void {
+  document.title = `${operator ? "Control room" : "Programme"} · Chess Director${mode === "DEMO" ? " DEMO" : ""}`;
+  if (operator) {
+    for (const node of app.querySelectorAll<HTMLElement>("[data-rehearsal], #demo-label")) node.hidden = mode !== "DEMO";
+    for (const node of app.querySelectorAll<HTMLElement>("[data-real]")) node.hidden = mode !== "REAL";
+  }
+}
+
+let catalogueKey = "";
+function showDetails(details: BroadcastOperator): void {
+  controls = details;
+  const select = app.querySelector<HTMLSelectElement>("#round-choice")!;
+  const key = JSON.stringify(details.catalogue.games);
+  if (catalogueKey !== key) {
+    catalogueKey = key;
+    const selected = select.value || (details.programme.mode === "REAL" ? details.programme.game?.id : "");
+    select.replaceChildren(new Option("Choose a game", ""),
+      ...details.catalogue.games.map(game => new Option(game.label, game.id)));
+    select.value = selected ?? "";
+  }
+  setText("#authority-status", authorityLabels[details.authorityStatus]);
+  const diagnostic = app.querySelector<HTMLElement>("#binding-diagnostic")!;
+  diagnostic.hidden = !details.diagnostic;
+  diagnostic.textContent = details.diagnostic;
+  if ("timeControl" in details) {
     setText("#time-control", details.timeControl);
     setText("#variation-time", shortTime(details.spotlightAtMs));
     setText("#move-time", shortTime(details.moveAtMs));
     setText("#journal-count", String(details.journalEntries));
     setText("#provider-contract", details.providerContract);
+  }
+  renderSelector();
+}
+
+async function operatorDetails(): Promise<void> {
+  const request = ++detailsRequest;
+  try {
+    const response = await fetch("/api/operator", { cache: "no-store" });
+    if (!response.ok) throw new Error("Operator details unavailable");
+    const details: BroadcastOperator = await response.json();
+    if (request !== detailsRequest || (latest &&
+        (latest.streamId !== (details.programme as BroadcastSnapshot).streamId ||
+        latest.selectionEpoch !== details.selectionEpoch))) return;
+    showDetails(details);
   } catch {
-    setText("#provider-contract", "Diagnostics unavailable; reconnecting.");
+    if (request !== detailsRequest) return;
+    controls = undefined;
+    renderSelector();
+    setText("#authority-status", "Control room details unavailable");
+    setText("#provider-contract", "Reconnecting to operator diagnostics.");
+    setTimeout(() => {
+      if (connected && request === detailsRequest) void operatorDetails();
+    }, 2000);
+  }
+}
+
+async function changeSelection(command: "select-game" | "enter-demo" | "clear-selection"): Promise<void> {
+  if (pending || !connected || !controls || !latest || controls.selectionEpoch !== latest.selectionEpoch) return;
+  const gameId = app.querySelector<HTMLSelectElement>("#round-choice")!.value;
+  if (command === "select-game" && !gameId) return;
+  pending = true;
+  renderOperator(latest);
+  setCommandStatus("Switching programme…");
+  try {
+    const response = await fetch("/api/operator/command", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: crypto.randomUUID(), command, selectionEpoch: controls.selectionEpoch,
+        ...(command === "select-game" ? { gameId } : {}),
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error ?? "Selection rejected");
+    if (!latest || latest.streamId !== result.programme.streamId || (latest.selectionEpoch ?? 0) > result.programme.selectionEpoch) {
+      setCommandStatus("Programme changed. Review the active game.");
+      return;
+    }
+    accept(result.programme);
+    setCommandStatus(command === "enter-demo" ? "Demo rehearsal on programme." :
+      command === "clear-selection" ? "Game selection cleared." : "Selected game on programme.");
+  } catch (error) {
+    setCommandStatus(error instanceof Error ? error.message : "Selection failed");
+  } finally {
+    await operatorDetails();
+    pending = false;
+    if (latest) renderOperator(latest);
   }
 }
 async function sendCommand(command: Command): Promise<void> {
-  if (pending || !latest) return;
+  if (pending || !latest || latest.mode !== "DEMO") return;
   pending = true;
   renderOperator(latest);
   setCommandStatus("Applying cue…");
@@ -357,11 +493,16 @@ async function sendCommand(command: Command): Promise<void> {
         id: crypto.randomUUID(),
         command,
         epoch: latest.game.epoch,
+        selectionEpoch: latest.selectionEpoch,
         revision: latest.game.revision,
       }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error ?? "Cue rejected");
+    if (!latest || latest.streamId !== result.programme.streamId || (latest.selectionEpoch ?? 0) > result.programme.selectionEpoch) {
+      setCommandStatus("Programme changed. Review the active game.");
+      return;
+    }
     accept(result.programme);
     setCommandStatus(
       command === "restart"
@@ -372,15 +513,16 @@ async function sendCommand(command: Command): Promise<void> {
             ? `${result.programme.actual.moveLabel} played.`
             : "Actual board restored.",
     );
-    await operatorDetails();
   } catch (error) {
     setCommandStatus(error instanceof Error ? error.message : "Cue failed");
   } finally {
+    await operatorDetails();
     pending = false;
     if (latest) renderOperator(latest);
   }
 }
 function connection(value: boolean): void {
+  if (connected === value && latest) return;
   connected = value;
   if (!value) cutProgrammeMotion();
   const banner = app.querySelector<HTMLElement>(".connection-banner");
@@ -392,24 +534,56 @@ function connection(value: boolean): void {
   app.querySelector("#connection-status")?.classList.toggle("offline", !value);
   if (operator && latest) renderOperator(latest);
 }
-function accept(s: ProgrammeSnapshot): void {
-  if (latest && s.sequence <= latest.sequence) return;
+function accept(s: BroadcastSnapshot): void {
+  const newStream = latest && latest.streamId !== s.streamId;
+  if (latest && !newStream && s.sequence <= latest.sequence) return;
+  const previous = latest;
   latest = s;
-  if (operator) renderOperator(s);
-  else renderProgramme(s);
+  if (newStream || previous?.mode !== s.mode) {
+    cutProgrammeMotion();
+    renderedGame = undefined;
+    renderedKind = renderedInstance = renderedSupport = renderKey = "";
+    showMode(s.mode);
+  }
+  if (operator) {
+    if (newStream || (previous && previous.selectionEpoch !== s.selectionEpoch)) {
+      // Discard a draft based on a superseded on-air selection.
+      app.querySelector<HTMLSelectElement>("#round-choice")!.value = s.mode === "REAL" ? s.game?.id ?? "" : "";
+      controls = undefined;
+    }
+    // Real snapshot sequence advances only for a new take or authority update;
+    // even a rejected PGN may change the diagnostic while leaving the slate intact.
+    const changed = s.mode === "REAL" || newStream || !previous || previous.selectionEpoch !== s.selectionEpoch;
+    if (changed) {
+      const diagnostic = app.querySelector<HTMLElement>("#binding-diagnostic")!;
+      diagnostic.hidden = true;
+      setText("#authority-status", "Checking…");
+      void operatorDetails();
+    }
+    renderOperator(s);
+  } else if (s.mode === "DEMO") {
+    renderProgramme(s);
+  } else {
+    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.summary]);
+    if (key !== renderKey) {
+      renderKey = key;
+      app.innerHTML = realProgramme(s, connected);
+      resizeProgramme();
+    }
+  }
 }
 async function resnapshot(): Promise<void> {
   if (recovering) return;
+  const atStart = latest;
   recovering = true;
   cutProgrammeMotion();
   try {
     const response = await fetch("/api/programme", { cache: "no-store" });
     if (!response.ok) throw new Error("Snapshot unavailable");
-    const snapshot = (await response.json()) as ProgrammeSnapshot;
-    if (latest && snapshot.sequence < latest.sequence) {
-      latest = undefined;
-      renderKey = "";
-    }
+    const snapshot: BroadcastSnapshot = await response.json();
+    // Trust a new process from the ordered stream or a fresh read. An older
+    // in-flight HTTP response cannot replace a generation learned in the interim.
+    if (latest && latest !== atStart && latest.streamId !== snapshot.streamId) return;
     accept(snapshot);
   } catch {
     connection(false);
@@ -417,10 +591,7 @@ async function resnapshot(): Promise<void> {
     recovering = false;
   }
 }
-if (operator) {
-  operatorShell();
-  void operatorDetails();
-}
+if (operator) operatorShell();
 resizeProgramme();
 addEventListener("resize", resizeProgramme);
 void resnapshot();
@@ -433,13 +604,14 @@ function connectStream(): void {
   source.addEventListener("open", () => {
     lastReceived = performance.now();
     void resnapshot();
+    if (operator && latest) void operatorDetails();
   });
   source.addEventListener("snapshot", (event) => {
     if (source !== stream || !navigator.onLine) return;
     lastReceived = performance.now();
-    const s = JSON.parse((event as MessageEvent).data) as ProgrammeSnapshot;
+    const s = JSON.parse((event as MessageEvent).data) as BroadcastSnapshot;
     connection(true);
-    if (latest && s.sequence > latest.sequence + 1) {
+    if (latest && latest.streamId === s.streamId && latest.selectionEpoch === s.selectionEpoch && s.sequence > latest.sequence + 1) {
       void resnapshot();
       return;
     }

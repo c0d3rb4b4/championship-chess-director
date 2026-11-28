@@ -1,6 +1,6 @@
 # Championship Chess Director
 
-A silent, OBS-ready chess programme with a separate local control room. The current build replays one synthetic **DEMO** game. The programme shows the board, real-game clocks, played moves, engine lines and their statistics. The control room holds the rehearsal cues and diagnostics.
+A silent, OBS-ready chess programme with a separate local control room. Select a championship round in the control room to put its pairing, scheduled start and timestamped game record on air. A separate **DEMO** rehearsal includes animated boards, clocks and engine statistics.
 
 ## Run locally
 
@@ -12,13 +12,23 @@ npm run dev
 ```
 
 - Programme: **http://127.0.0.1:3000/programme** — fixed 1920 × 1080 composition, uniformly scaled, no controls or audio.
-- Operator: **http://127.0.0.1:3000/operator** — shared programme preview, fixture status, rehearsal cues and diagnostics.
+- Operator: **http://127.0.0.1:3000/operator** — game selector, shared programme preview, authority status and rehearsal controls.
 
 The server binds to loopback only. Keep it running while using OBS. `npm run dev` builds both bundles and starts the persistent server; rerun it after code changes. For a built checkout, `npm start` starts without rebuilding. `PORT=3100 npm run dev` selects another port.
 
+## Select a championship game
+
+A fresh install opens on **Awaiting game selection**. On `/operator`, choose a round and click **Take Game N to programme**. Browsing the list leaves the current programme on air. Both viewers and the preview receive the same switch. The selector uses the browser’s local timezone and the programme uses the event timezone.
+
+Each take and server restart requests one PGN from the mapped Lichess round. A verified record shows the result or game state, the move count and the last move. The record timestamp identifies the observation. Take the same game again to request an updated summary. Continuous live updates are scheduled for G2. **Clear selection** returns all viewers to the neutral slate.
+
+The [championship catalogue](config/championship.json) contains the published rounds, verified pairings, UTC starts and round/chapter bindings. To publish a revised catalogue, edit the file or set `CHAMPIONSHIP_CATALOGUE` to another file and restart the server. Use `null` for an unknown start or pending binding. An invalid or missing configuration falls back to the last validated catalogue when available. The control room reports binding mismatches and authority failures. The schedule comes from [FIDE](https://worldchampionship.fide.com/schedule) and colour assignments from its [pairings](https://worldchampionship.fide.com/games).
+
+The server stores the selection and its last verified summary in SQLite. Set `BROADCAST_DB` to choose the database path. The default remains `data/demo.sqlite` so existing installations keep their rehearsal checkpoint. A legacy rehearsal database opens on the neutral slate until the operator makes a selection.
+
 ## Watch the demo
 
-Open both routes and click **Restart demo** in the operator view. The fixture follows this sequence.
+Open both routes. Click **Enter demo rehearsal** in the operator view, then **Restart demo**. The fixture follows this sequence.
 
 1. White thinks in the Italian Game after `9...h6`. The actual board is 768 pixels square. Three fixture analysis revisions settle over six seconds.
 2. At **1:15**, a frozen Stockfish line takes focus. The 416-pixel actual board, clocks and turn remain visible. The separate 768-pixel board carries **ANALYSIS LINE NOT PLAYED** throughout. It holds the root for two seconds and advances one hypothetical ply every two seconds.
@@ -27,7 +37,7 @@ Open both routes and click **Restart demo** in the operator view. The fixture fo
 
 For a quick walkthrough, click **Cue variation**, watch a few hypothetical plies, then **Play actual move**. These cues advance the shared presentation clock; the automatic sequence uses the same state machine. **Return to actual board** cancels the variation without playing a move. Restart to repeat. The demo does not silently loop.
 
-All programme windows, the operator preview and OBS share one server-owned scene. A browser refresh resnapshots the current state. SQLite checkpoints and command IDs are stored in `data/demo.sqlite`; after a server restart the demo resumes from the saved presentation time, pausing during downtime. Use `DEMO_DB=:memory: npm run dev` for an ephemeral rehearsal.
+All programme windows, the operator preview and OBS share one server-owned scene. A browser refresh resnapshots the current state. SQLite checkpoints and command IDs are stored in `data/demo.sqlite`; after a server restart the demo resumes from the saved presentation time, pausing during downtime. Use `START_IN_DEMO=1 BROADCAST_DB=:memory: npm run dev` for an ephemeral rehearsal. The startup flag can start a fresh rehearsal or restore a selected demo. A normal restart takes rehearsal off air and retains its checkpoint for explicit re-entry. A saved real selection takes precedence over the flag. **Leave demo rehearsal** returns to the neutral slate. Taking a championship game switches directly from the demo.
 
 ## Add the programme to OBS
 
@@ -58,7 +68,7 @@ The Chromium tests drive the actual operator buttons and two programme viewers. 
 
 The persistent Node/TypeScript server owns chess rules, a deterministic director, a SQLite WAL checkpoint/command journal and a shared ordered SSE stream. The browser renders validated board frames; it schedules no variation timers. Fixture score meanings and full history bindings are explicit. See [slice architecture and limits](docs/DEMO_SLICE.md) and [fixture contract](fixtures/README.md).
 
-This implements the first demo sequence, not the complete P0 release. Production adapters and captures, results/corrections, programme delay, the full scene rotation, producer profiles, remote authentication and eight-hour/OBS performance gates remain future work. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
+The real selector and one-time authority summary implement game-day G1. Continuous ingestion, corrections and programme delay begin in G2. Post-game replay, countdowns and the production rehearsal follow in G3–G5. Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
 
 - [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
 - [Game-day implementation plan and repeatable prompt](docs/GAME_DAY_PLAN.md) for choosing real championship games, countdowns, replays and post-game statistics.

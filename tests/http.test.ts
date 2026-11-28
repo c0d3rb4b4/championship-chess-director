@@ -13,6 +13,7 @@ test("HTTP command → shared programme interruption, idempotency, protection an
   const launch = async () => {
     const app = createBroadcastServer({
       dbPath,
+      startInDemo: true,
       publicDir: resolve("dist/public"),
       now: () => now,
     });
@@ -36,6 +37,7 @@ test("HTTP command → shared programme interruption, idempotency, protection an
     const original = await get();
     const payload = {
       id: "cue-one",
+      selectionEpoch: 1,
       command: "cue-spotlight",
       epoch: original.game.epoch,
       revision: 1,
@@ -57,6 +59,7 @@ test("HTTP command → shared programme interruption, idempotency, protection an
     assert(first.includes('"kind":"spotlight"'));
     const release = {
       id: "real-one",
+      selectionEpoch: 1,
       command: "release-move",
       epoch: original.game.epoch,
       revision: 1,
