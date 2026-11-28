@@ -109,24 +109,30 @@ test("two programme viewers receive the played position immediately and highligh
     root!,
   );
   const playedFen = new Director().command("release-move").actual.fen;
-  const started = performance.now();
-  // Actual operator click exercises the HTTP command, shared director, SSE, and browser render path.
-  await page
-    .getByRole("button", { name: "Play actual move", exact: true })
-    .click();
-  await Promise.all(
-    [programme, second].map(async (viewer) => {
-      await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move", { timeout: 500 });
-      await expect(viewer.getByTestId("actual-board")).toHaveAttribute("data-fen", playedFen, { timeout: 500 });
-      await viewer.evaluate(
-        () =>
-          new Promise<void>((resolve) =>
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-          ),
-      );
-    }),
-  );
-  const clickToPaintMs = performance.now() - started;
+  // Observe the first correct frame before clicking. Serial Playwright assertions and
+  // a later requestAnimationFrame can otherwise measure driver latency after the paint.
+  const viewers = [programme, second];
+  await Promise.all(viewers.map(viewer => viewer.evaluate(fen => {
+    const observer = new MutationObserver(() => {
+      const main = document.querySelector('[data-testid="programme"][data-scene="actual-move"]');
+      if (main?.querySelector('[data-testid="actual-board"]')?.getAttribute("data-fen") !== fen) return;
+      observer.disconnect();
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        document.documentElement.dataset.correctPaint = String(Date.now());
+      }));
+    });
+    observer.observe(document.querySelector("#app")!, {subtree:true,childList:true,attributes:true});
+  }, playedFen)));
+  const started = Date.now();
+  await page.getByRole("button", { name: "Play actual move", exact: true }).click();
+  const paints = await Promise.all(viewers.map(async viewer => {
+    await expect(viewer.getByTestId("programme")).toHaveAttribute("data-scene", "actual-move", { timeout: 500 });
+    await expect(viewer.getByTestId("actual-board")).toHaveAttribute("data-fen", playedFen, { timeout: 500 });
+    await viewer.waitForFunction(() => !!document.documentElement.dataset.correctPaint);
+    return viewer.evaluate(() => Number(document.documentElement.dataset.correctPaint));
+  }));
+  const clickToPaintMs = Math.max(...paints) - started;
+  expect(Math.min(...paints)).toBeGreaterThanOrEqual(started);
   expect(clickToPaintMs).toBeLessThan(500);
   await expect(programme.getByTestId("analysis-board")).toHaveCount(0);
   await expect(programme.locator(".analysis-region")).toHaveCount(0);
