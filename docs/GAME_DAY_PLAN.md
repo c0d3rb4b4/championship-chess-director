@@ -1,0 +1,111 @@
+# Game-day programme for the World Championship
+
+A producer selects **one real championship game** in `/operator`. Everyone watching the existing `/programme` URL, including OBS and the operator preview, sees the same broadcast. Before play, the previous game's replay runs on the left and the selected game's countdown fills the right. During play, the selected game takes the full live layout. After the result, its own replay and statistics run automatically until the producer selects another game.
+
+This is the implementation plan for that workflow. **G1–G5 are proposed work.** The reference checkout is [main at 3333395](https://github.com/c0d3rb4b4/championship-chess-director/commit/33333959f1358bbe0bcc862ef597b8180ec3a55d). The normal server at that revision runs a synthetic game.
+
+## Match-day example · Saturday 28 November 2026
+
+| Programme role | Round and players | Verified input |
+|---|---|---|
+| Selected game | **Game 4** · Gukesh D (White) v Javokhir Sindarov (Black) | Scheduled for **15:00 Geneva / 14:00 London**, stored as `2026-11-28T14:00:00Z`. Lichess round `wIwJtPqz`, chapter `IriXvwPw`, PGN round `4.1`. |
+| Previous completed game | **Game 3** · Javokhir Sindarov (White) v Gukesh D (Black) | Lichess round `fnmEB1kH`, chapter `RD8sbYw1`, PGN round `3.1`. Draw after **60…Kf3**, 120 plies. The match stood at **1½–1½**. |
+
+On the Game 4 waiting screen, a viewer should be able to read **“Game 4 · Waiting for the first move”** above the countdown and **“Replay · Game 3 · ½–½”** above the moving board. The two players swap colours between these games. That makes this pair a useful test for accidentally attaching Game 4's player rows to Game 3's board. Selecting the verified Game 3 archive directly should open its finished-game programme at once. Game 4 follows the same rule whenever its own result is confirmed.
+
+[FIDE schedule](https://worldchampionship.fide.com/schedule) · [FIDE pairings](https://worldchampionship.fide.com/games) · [FIDE Game 3 report](https://worldchampionship.fide.com/news/game-3-a-tense-fight-ends-in-a-draw-MCO642SJKNYZA3DGG3NMR7NI3XCA) · [repository binding, clock checks and deployment evidence](PROVIDER_CONTRACTS.md). The Game 4 capture described there was a **preflight**. A scheduled time or an archive capture cannot certify current feed health.
+
+## What to build on
+
+| Existing material | Use in this implementation |
+|---|---|
+| [Product requirements v1.3](Live_Chess_Broadcast_UI_PRD.docx) and [technical design](DESIGN.md) | Carry forward the silent programme, automatic direction, board identity, separate engine meanings, verified game binding, replay labels, delay, recovery and OBS acceptance. See PRD §§3–8 and 10–16. |
+| [Original delivery plan](PHASED_PLAN.md) and [provider contracts](PROVIDER_CONTRACTS.md) | Original Phases 0–2 merged. Phase 3/M0 has a real Game 3 archive, a Game 4 preflight, decoders and a recorder. Shared-root in-play evidence, clock convention, deployed Leela fields and usage checks remain open. G1–G5 deliver specific parts of original Phases 4–6. Track the broader gates in the original plan. |
+| [Run instructions](../README.md), [demo slice](DEMO_SLICE.md) and [fixture contract](../fixtures/README.md) | Reuse the loopback server, shared SSE snapshots, SQLite, operator preview and explicit rehearsal cues. The current director, clocks, history and `ProgrammeSnapshot.mode` assume the demo. A production start must restore an explicit real selection or open an unselected slate. Keep the demo available by deliberate rehearsal choice. |
+| [Board reference](reference/metal-board-and-pieces.png), [programme review](evidence/README.md) and [statistics review](evidence/phase-2/README.md) | Reuse the metal board and pieces, colour-aligned names, flags and clocks, horizontal evaluation bars, move-zero graphs and current interruption motion. Review at 1920 × 1080 and 1280 × 720. |
+| [Provider screenshot workflow](../.github/workflows/provider-screenshots.yml) and [simulation](../tests/browser/provider-simulation.spec.ts) | Existing rendered examples exercise synthetic provider snapshots. Add a round-selection scenario through the real server so the pictures also verify which game is on air. |
+
+## Selection and lifecycle
+
+Use a championship catalogue keyed by stable event and game IDs. Each entry carries its round order and display name, players' IDs and colours, start FEN, verified start instant and timezone when known, schedule source, and authority round/chapter mapping when available. Configure the event once. Show all published rounds in order, including those with a pending feed binding. Start with a configuration file populated from the FIDE schedule and verified Lichess round/chapter mappings. Later rounds become selectable without a code change. A published pairing can appear before its chapter ID exists. Keep the last validated catalogue across outages. A scheduled game can be taken to air before its feed opens. Show its binding status and any mismatch in the control room.
+
+The producer highlights a row and chooses **Take Game N to programme**. Browsing rows has no on-air effect. Display the active round, state, scheduled start in the operator timezone, and a preview of the shared output. Remember the selection across browser and server restarts. A finished selection keeps playing its recap even if another round starts. Switching is an explicit operator action. Rehearsal cues apply only to the demo.
+
+| Evidence on the presentation timeline | What appears in `/programme` |
+|---|---|
+| No selected game | Neutral waiting slate. The control room invites a selection. |
+| Selected future round with a verified schedule, or a bound, healthy PGN with zero moves and `*` | Waiting layout. Show the round, players, start time with timezone and a prominent countdown. The left board loops the latest earlier **completed** round in this event. |
+| Start time reached, healthy bound feed still reports zero moves | Replace the digits with **Awaiting first move**. Continue the previous replay. A rescheduled start uses the newly verified time. An unknown time displays **Start time to be confirmed**. |
+| Already underway on selection, or first accepted move becomes eligible | Present the latest released actual position, turn and played moves. Take over from waiting in one update. Suppress the previous replay. Matching engine analysis and verified clocks can arrive independently. |
+| Confirmed result, including a game already finished when selected | Show the selected result and final verified position. Freeze the player clocks. Hold the conclusion for 30 seconds by default, then loop its recap pages and actual-move replay. |
+| Authority unavailable, unknown status or conflicting identity | Before the scheduled start keep the verified countdown. During play retain the last confirmed position, freeze uncertain clocks and show feed interruption. With no trustworthy position after the scheduled start, show **Awaiting game update**. On reconnect reconcile a bound full snapshot, which may already contain a result. |
+
+An explicit result from the bound move authority takes precedence over ply count, including a result with zero moves. Preserve the PRD's audited operator confirmation path if used. An empty PGN, `*`, a large evaluation, a silent engine or countdown expiry supplies no result. A pending game with no verified schedule or binding can show the waiting slate with time unconfirmed. Do not infer that a game has started from its scheduled time alone.
+
+### Morning, live play and replay on one timeline
+
+- **Before play.** Drive countdown digits from a server-supplied time anchor and the verified scheduled instant. Use the configured presentation timeline throughout, including programme delay. Clamp at zero. A refresh or second viewer joins the same countdown and replay ply. Game 1, an unavailable archive, or a completed game with no legal moves gets a static waiting layout with the available verified pairing or previous result.
+- **During play.** The bound authority owns actual moves, turn and result. Release the current mainline even if both engines are unavailable. A healthy long think keeps the actual board visible. Preserve existing move interrupts, the distinctly labelled analysis board and separate Stockfish/Leela scales. Only display clocks, WDL and search shares supported by the relevant provider checks.
+- **During the replay.** Generate frames with the existing chess rules and board renderer, from the game's actual starting FEN through its ordered legal mainline. Show a persistent **REPLAY** label, round, players in their actual colours, current move number/SAN and last-move tint. Make a shared replay cursor independent of the live game and its clocks. Suggested initial pacing is a two-second hold at the start, two seconds per ply and four seconds on the final position. Use recorded clock snapshots only when verified. No engine variation may advance this board.
+- **At a transition.** A released first move, confirmed result, correction or game switch cancels the superseded scene's deadlines. The accepted live board is visible within 500 ms of eligible release, even if a transition is finishing. A simultaneous replay tick loses to the real move. Use a single transition and a direct cut for reduced motion or resnapshot. Programme windows stay silent and control-free.
+
+### Finished-game rundown
+
+Generate the following pages from the selected game. The director advances them inside `/programme`. The operator preview and a newly opened OBS window join the current page and ply. Dwell times below are initial profile defaults.
+
+| Order | Page | Contents and condition |
+|---|---|---|
+| 1 | Result · 30 s | Final board, players, result and completed move count. Include match score through **this** round and next scheduled start only when verified. |
+| 2 | Game in numbers · 12 s | PGN-only page with White and Black moves played and captures by each side, derived from legal move records. Show the opening only if sourced. Works with a final PGN alone. |
+| 3 | Time used · 15 s | Per-side completed-move time and longest verified think with SAN. Use elapsed times or the verified clock convention and time control. Keep gaps and qualify partial totals or longest observed think. Skip the page if no durations are supported. |
+| 4 | Evaluation history · 15 s | Align verified historical Stockfish pawn scores and Leela W/D/B on separate scales, starting the axis at move 0. Keep missing plies as gaps. Include whichever eligible series exists. Distinguish observations available during play from later, explicitly labelled retrospective analysis. Skip an empty page. |
+| 5 | Replay of the selected game | Play from the initial frame through the final mainline at the configured pace, then return to page 1. For a result without a playable record, rotate the eligible factual pages. |
+
+A lone final-root engine observation may support a labelled final-position value. It cannot fill the game's evaluation graph. The time chart also spans move 0 through the final ply and preserves unknown intervals. Avoid substituting demo values, receipt-time differences or synthetic starting evaluations. For a result with incomplete moves, report only the verified record and label its coverage.
+
+## Data flow and recovery
+
+1. **Select and bind.** Extend [shared types](../src/shared/types.ts), [HTTP and command handling](../src/server/http.ts), [server startup](../src/server/index.ts) and [operator UI](../src/client/app.ts). Represent the selected game, lifecycle, displayed board role and any replay game ID separately. Server-owned time anchors and nullable clocks support waiting and replay. Keep raw health and unverified fields on the operator API.
+2. **Ingest.** Run one shared authority connection per bound input regardless of viewer count. Read the selected chapter from its round PGN, fetch the preceding archive once per version, and reuse the [game](../src/server/providers/game.ts), [Sesse](../src/server/providers/sesse.ts) and [Leela](../src/server/providers/leela.ts) decoders and [recorder transport work](../scripts/capture-providers.ts). Validate IDs, colours, event, round, start FEN and complete legal history. A scheduled PGN's event header can change at start. Revalidate the mapping before accepting it. Use serial requests, backoff and resnapshot on recovery.
+3. **Persist and release.** Extend the [SQLite store](../src/server/store.ts) with versioned migration for the catalogue, selection epoch, raw observations, accepted mainlines/revisions, released cursor and director checkpoint. Commit a switch and its command ID atomically. Repeating the same request is idempotent. A reused ID with a different game, or a command from a stale operator, cannot change the broadcast. Migrate existing demo checkpoints into the rehearsal path.
+4. **Respect delay and corrections.** With delay D release no earlier than both receipt and trusted occurrence time plus D. Without trusted occurrence time, use receipt plus D. HTTP, SSE, preview, replay preemption, result and recap all follow the same released state. A switch starts a fresh epoch. Fence late requests, callbacks and timers from the old game. A corrected history advances its revision and rebuilds from the common ancestor, invalidating dependent clocks, charts and replay frames. Route result amendments or withdrawals through the same released timeline.
+   For a newly selected historical game, a cached released result or a trusted completion time older than D makes the final mainline eligible on receipt after validation. Otherwise keep a neutral loading or buffer-filling slate until the result is eligible. Apply this rule to previous-game replay, score and labels as well. Archive fetch time alone cannot prove a game finished before the delay window.
+5. **Restore.** Resume the selected game and currently eligible scene from durable state. Resnapshot upstream when necessary. Jump to the eligible state after downtime and avoid repeating old move announcements. For missing delay coverage, show the existing design's buffer-filling slate. A failed write or invalid selection leaves the last committed selection intact. Extend the [director](../src/server/director.ts), [history](../src/server/history.ts) and [statistics](../src/server/statistics.ts) without importing demo moves or clocks into real games.
+
+## Implementation phases
+
+Use this table for **game-day NEXT**. Evidence for a row belongs to its implementation PR. Once the PR has a number, add its link and exit-check evidence to its row on the same branch. A linked PR satisfies the dependency when it is merged on main with the phase exit checks met. A pending provider field can stay disabled while development proceeds on the verified parts of the workflow.
+
+| Phase | Status / PR | Depends on | Deliverable through the normal routes | Exit evidence |
+|---|---|---|---|---|
+| **G1 · Choose a real game** | Open | This plan merged | Catalogue and protected selector, durable active game, real-mode startup and clear unselected/pending slates. Load the selected round from the configured real authority for a verified summary. Restore or explicitly enter demo separately. | Select Game 4 then Game 3. Both programme viewers show the new identity. Refresh and restart restore the selection. Test fresh install, legacy demo DB, invalid binding, duplicate command, stale operator and late response from the prior selection. |
+| **G2 · Follow the selected game** | Open | G1 | Poll and reconcile the selected authority in the running server. Release waiting, in-progress and confirmed-result state with actual boards and moves, delays, corrections, recoverable journal and eligible engine data. A mid-game join starts at its released position. | Using a local upstream transport, exercise empty PGN → first move → several moves → result, including a late engine, an authority gap, a corrected move and restart. At D=0 and D=60 s check both viewers and operator preview immediately before and after release. A fresh confirmed result interrupts even with both engines offline. |
+| **G3 · Replay and statistics for finished games** | Open | G2 | Build the shared historical playback cursor and finished-game rundown. An archive selected directly and a live game that ends use the same pages. Build the move-only page first so every complete playable PGN produces statistics and replay. | Reach every eligible page and complete one loop with a fake clock. Verify each replay frame and last SAN against the accepted PGN, all totals against a known-score fixture, missing fields, and mid-loop refresh. Check the Game 3 archive privately against the example above when accessible. |
+| **G4 · Countdown with previous-game replay** | Open | G3 | Put the previous completed game's replay on the left, selected pairing and countdown on the right. Adopt reschedules, delays, absent archives and the first-move takeover on the same timeline. | Capture Game 4 waiting with Game 3's opposite colours, two successive replay plies, a countdown crossing zero, Game 1 without a predecessor, an unknown start and a reschedule. Preempt a replay tick with the first eligible move once. Repeat with delay, reduced motion and a game switch. |
+| **G5 · Match-day rehearsal and review evidence** | Open | G4 | Extend the existing screenshot CI and operator runbook. Rehearse pre-game → live → result → recap, and selecting a completed game cold. Record a status for each source and the original M0–M3 release gates. | Run the matrix below and attach commit-labelled stills and transition clips. Document a real round-binding smoke check or the precise unverified step, source and observation time. Report private rehearsal, public broadcast readiness and outstanding external checks separately. |
+
+### Verification for each implementation PR
+
+Run `npm ci`, `npm run check`, `npm run build`, `npm test`, `npx playwright install --with-deps --no-shell chromium` and `npm run test:e2e`. For graphics changes also run `npm run screenshots:providers` and inspect the rendered 1080p and 720p frames. Include the relevant PRD acceptance cases and the selected row's evidence in the PR.
+
+| Scenario | What the reviewer should see |
+|---|---|
+| Two viewers plus operator preview | Drive the actual selector through `/operator`. Use HTTP, SQLite and real SSE to reach `/programme`. Inject deterministic inputs at the upstream transport and clock. Verify all three surfaces share game ID, page and replay ply. A renderer-only snapshot cannot establish this. |
+| Historical coverage | Compare replay FEN, SAN and mover at each ply, including a capture, castling and a promotion in test games. Check separate game IDs for prior replay and current selection. Replay an input twice and compare scene order, results and totals. |
+| Delay and interruption | During a countdown or previous-game replay, buffer a first move. No board, label, clock, chart or replay exit changes early because of that move. At release assert one takeover within 500 ms. Repeat for a result, including receipt with the final move in one PGN. |
+| Recovery and correction | Start with both engines missing. Drop and recover authority. Refresh OBS, restart the server, revise a move or result and switch games during replay. Check that old callbacks cannot repopulate the screen or skip a result. |
+| Broadcast evidence | At both resolutions capture pre-game with and without a previous game, live, conclusion, the eligible statistics pages and mid-replay. Record a 720p clip of the opening takeover and one of the result-to-recap transition. Check labels, colour-aligned rows, graph origins, legibility and reduced motion. Extend the current PR/main capture job and include the run/artifact link. |
+
+Keep CI deterministic and use redistributable test inputs. Keep private captures under ignored `data/`. Follow the existing [provider terms and attribution](PROVIDER_CONTRACTS.md#provider-terms-and-attribution) and [production sign-off](PHASED_PLAN.md#6-sign-off-on-the-production-host) for live coverage, required delay, source-specific permissions, the OBS capture, eight-hour rehearsal and viewer checks. Record precisely which checks ran. An unavailable optional feed need not block a working authority-only programme or finished-game replay.
+
+## Repeatable prompt
+
+Paste this into a fresh project chat after the plan PR merges. Reuse it after each implementation PR merges.
+
+```text
+@GitHub Use c0d3rb4b4/championship-chess-director. Implement exactly one phase from docs/GAME_DAY_PLAN.md. NEXT is the lowest-numbered unfinished G1–G5 phase whose prerequisites are merged on current main. Inspect the phase table, merged and open PRs, repo instructions, linked PRD, design, provider contracts and relevant source/tests. If a PR already implements NEXT, resume its branch, or return its link if ready for review. If all five phases are merged, report completion and any outstanding broadcast sign-off.
+
+Deliver NEXT end to end through the real /operator and /programme routes. Follow the plan's selection, waiting/countdown, live and finished replay contracts as applicable to this phase. Keep demo explicit and optional provider fields evidence-gated. Use deterministic upstream fixtures for CI and report actual feed checks separately.
+
+Run typecheck, build, Node tests, browser tests and the phase exit checks. For visible changes inspect 1080p and 720p and include screenshots and relevant transition clips. Update the phase row with its PR and verified or outstanding checks. Open or update one review-ready PR against main. Return its link, test results, evidence and the next phase after merge. Leave merging to me.
+```

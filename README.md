@@ -61,6 +61,7 @@ The persistent Node/TypeScript server owns chess rules, a deterministic director
 This implements the first demo sequence, not the complete P0 release. Production adapters and captures, results/corrections, programme delay, the full scene rotation, producer profiles, remote authentication and eight-hour/OBS performance gates remain future work. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
 
 - [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
+- [Game-day implementation plan and repeatable prompt](docs/GAME_DAY_PLAN.md) for choosing real championship games, countdowns, replays and post-game statistics.
 - [Technical design](docs/DESIGN.md)
 - [Product requirements](docs/Live_Chess_Broadcast_UI_PRD.docx)
 
