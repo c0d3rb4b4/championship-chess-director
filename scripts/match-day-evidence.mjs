@@ -28,6 +28,9 @@ function media(file, width, height) {
 for (const [label, stem] of [
   ["Countdown with previous replay", "g4/waiting-ply-2"],
   ["Countdown without predecessor", "g4/game-1-no-predecessor"],
+  ["Unattended comparison", "unattended/comparison"],
+  ["Unattended game in numbers", "unattended/numbers"],
+  ["Settled live variation", "unattended/spotlight"],
   ["Released live position", "g2/live"],
   ["Conclusion", "g3/result"],
   ["Game in numbers", "g3/numbers"],
@@ -39,7 +42,7 @@ for (const [label, stem] of [
 }
 
 report.push("", "## Silent transitions", "");
-for (const name of ["g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
+for (const name of ["auto-rotation", "auto-entrance", "auto-return", "auto-interrupt", "g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
   report.push("- " + media(`videos/${name}-720p.mp4`, 1280, 720));
 }
 
@@ -55,4 +58,16 @@ for (const [label, folder] of [["Opening", "g4"], ["Final move and result", "g5/
     report.push(`| [${label}](${file}) | ${delay} s | ${hd} | ${sd} | ${preview} |`);
   }
 }
+for (const seconds of [0, 60]) {
+  const file = `unattended/interrupt-D${seconds}.json`;
+  const rows = JSON.parse(readFileSync(join(directory,file),"utf8"));
+  if (new Set(rows.map(r => r.label)).size !== 11) throw Error("Incomplete live interrupt matrix");
+  for (const row of rows) {
+    if (row.paints.length !== 3 || row.paints.some(ms => !(ms >= 0 && ms < 500))) throw Error("Late live move");
+    report.push(`| [${row.label}](${file}) | ${seconds} s | ${row.paints.join(" | ")} |`);
+  }
+}
+const { first, second } = JSON.parse(readFileSync(join(directory,"unattended/endurance.json"),"utf8"));
+if (first.timelineMs !== 8*3600000 || first.digest !== second.digest) throw Error("Endurance replay mismatch");
+report.push("", `[Eight-hour accelerated replays and resource samples](unattended/endurance.json). Minimum rolling large-board share ${(first.minimumLargeShare*100).toFixed(1)}%.`);
 writeFileSync(join(directory, "MATCH-DAY.md"), report.join("\n") + "\n");

@@ -1,3 +1,4 @@
+import type { BoardProgramme } from "./live-view.js";
 import { escape as e } from "./board.js";
 import type { FinishedRecap, ProgrammeSnapshot } from "../shared/types.js";
 
@@ -30,7 +31,7 @@ function chart(labels: string[], series: Series[], unit: string, fixedMaximum?: 
     <svg viewBox="0 0 860 235" role="img" aria-label="${e(unit)}"><text x="20" y="22">${e(unit)}</text>${ticks}${lines}
     ${labelIndices.map(i => `<text x="${x(i)}" y="216" text-anchor="middle">${e(labels[i])}</text>`).join("")}</svg></div>`;
 }
-function timePanel(s: ProgrammeSnapshot): string {
+function timePanel(s: BoardProgramme): string {
   const totals = [0,0];
   const series: Series[] = [{ name: "White", values: [0] }, { name: "Black", values: [0] }];
   const elapsed = new Map(s.moveTimes.map(m => [m.ply, m.elapsedMs]));
@@ -47,7 +48,7 @@ function timePanel(s: ProgrammeSnapshot): string {
     <div class="time-totals">${series.map((line,i) => `<div><span>${line.name} · recorded</span><strong>${number(totals[i]/60000)} min</strong></div>`).join("")}</div>
     ${chart(labels,series,"Minutes on completed moves")}<p class="axis-label">Move number</p>`;
 }
-export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,number,number], candidate?: string) => string): string {
+export function statisticsPanel(s: BoardProgramme, outcome: (v: [number,number,number], candidate?: string) => string): string {
   let body = "";
   if (s.panel === "outcomes") {
     const engine = s.engines.find(e => e.id === "leela");
@@ -59,7 +60,7 @@ export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,numbe
   else if (s.panel === "search") {
     body = `<h2>Search progress</h2>${s.engines.map(engine =>
       `<section class="work"><h3>${e(engine.name)}</h3>${engine.workUnit && engine.work !== undefined ?
-        `<p><strong>${number(engine.work)}</strong> ${engine.workUnit} <span>Depth ${engine.depth}</span></p>
+        `<p><strong>${number(engine.work)}</strong> ${engine.workUnit} ${engine.depth !== undefined ? `<span>Depth ${engine.depth}</span>` : ""}</p>
         ${engine.workDelta !== undefined ? `<small>Last increase &nbsp; +${number(engine.workDelta)} ${engine.workUnit}</small>` : ""}
         ${engine.visitShares ? `<div class="shares">${engine.visitShares.map(v => `<span>${e(v.san)} &nbsp;${number(v.percent)}%</span>`).join("")}</div>` : ""}` : "<p>Updating for this position</p>"}</section>`).join("")}`;
   } else if (s.panel === "history") {

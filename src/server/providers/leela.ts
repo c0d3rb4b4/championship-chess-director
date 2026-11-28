@@ -1,4 +1,4 @@
-import { count, line, list, object, type Game } from "./game.js";
+import { count, line, list, object, providerFenMatches, wirePositions, type Game } from "./game.js";
 
 // Each subscription is scoped to an explicitly mapped provider game and an
 // authoritative root. A new connection must send a matching position first.
@@ -9,6 +9,7 @@ export class LeelaReplay {
   private evalId?: number;
 
   subscribe(gameId: number, game: Game) {
+    const doublePush = wirePositions(game).at(-1)?.doublePush;
     const generation = ++this.generation;
     this.matched = false;
     this.evalId = undefined;
@@ -19,7 +20,7 @@ export class LeelaReplay {
       const selected = (v: unknown) => list(v ?? []).map(object)
         .filter(p => p.gameId === gameId && p.ply === game.moves.length);
       for (const position of selected(frame.positions)) {
-        this.matched = position.fen === game.fen;
+        this.matched = providerFenMatches(position.fen, game.fen, doublePush);
         if (!this.matched) {
           this.candidates.clear();
           this.evalId = undefined;

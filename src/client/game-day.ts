@@ -3,6 +3,7 @@ import { board, escape as e } from "./board.js";
 import { finishedPanel } from "./recap.js";
 
 export const roundStates: Record<RealProgramme["state"], string> = {
+  hold: "Programme on HOLD",
   buffering: "Filling programme buffer",
   unselected: "Awaiting game selection",
   pending: "Waiting for the game",
@@ -55,10 +56,10 @@ export function pawnEstimate(pawns: number, score: string): string {
     </div>`;
 }
 
-function livePlayer(game: NonNullable<RealProgramme["game"]>, side: "white" | "black") {
+function livePlayer(game: NonNullable<RealProgramme["game"]>, side: "white" | "black", ms?: number) {
   const { country, name } = game[side];
   return `<div class="live-player ${side}"><span>${side === "white" ? "White" : "Black"}</span>${country
-    ? `<img class="player-flag" alt="" src="/flags/${country.toLowerCase()}.svg">` : ""}<strong>${e(name)}</strong></div>`;
+    ? `<img class="player-flag" alt="" src="/flags/${country.toLowerCase()}.svg">` : ""}<strong>${e(name)}</strong>${ms === undefined ? "" : `<time>${countdownLabel(Math.ceil(ms/1000))}</time>`}</div>`;
 }
 
 function liveGame(s: RealProgramme, connected: boolean) {
@@ -87,7 +88,7 @@ function liveGame(s: RealProgramme, connected: boolean) {
       ? '<strong class="replay-tag">REPLAY</strong>'
       : `<strong>${final && recap && recap.page !== "result" ? `Final score · ${e(resultLabel(final))}`
         : final ? "Final result" : "Game in progress"}</strong>`}</header>
-    <div class="live-board-stack">${livePlayer(game, "black")}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${livePlayer(game, "white")}</div>
+    <div class="live-board-stack">${livePlayer(game, "black", playback ? undefined : position.clocks?.blackMs)}${playback ? board(playback.frame, "replay") : board(position.actual, "actual")}${livePlayer(game, "white", playback ? undefined : position.clocks?.whiteMs)}</div>
     <article class="live-sheet"><h1>${e(game.label)}</h1>
       ${recap ? finishedPanel(s, resultLabel, startLabel) : `<section class="live-lead"><p>${final ? "Final result" : "Last move"}</p>
         <h2>${e(final ? resultLabel(final) : lastMoveLabel(summary))}</h2>

@@ -38,7 +38,7 @@ export function commonPlies(a: string[], b: string[]): number {
 export class Recap {
   private readonly playback: GameReplay;
   private readonly pages: { page: RecapPage; ms: number }[] = [{ page: "result", ms: resultMs }];
-  private readonly facts: Omit<FinishedRecap, "page" | "replay">;
+  readonly facts: Omit<FinishedRecap, "page" | "replay">;
 
   constructor(gameId: string, position: ReleasedPosition, readonly finishedAt: number,
       { roots, samples: observations }: ReturnType<Store["recapJournal"]>) {

@@ -56,7 +56,7 @@ export function decodeBoundGame(game: CatalogueGame, body: string) {
   try {
     return decodeGame({
       authority: "lichess", gameId: binding.chapterId, event, round: binding.pgnRound,
-      whiteId: game.white.id, blackId: game.black.id, startFen: game.startFen, clockConvention: "unknown",
+      whiteId: game.white.id, blackId: game.black.id, startFen: game.startFen, timeControl: binding.timeControl, clockConvention: binding.clockConvention ?? "unknown",
     }, "lichess", binding.chapterId, pgn, { verifiedElapsed: binding.elapsedTime === "pgn-emt" });
   } catch {
     throw new BindingError("PGN identity, colours or legal mainline failed verification");
@@ -70,7 +70,8 @@ export function gameSummary(decoded: ReturnType<typeof decodeBoundGame>): GameSu
 
 export function gamePosition(game: CatalogueGame, decoded: ReturnType<typeof decodeBoundGame>,
     now: number, revision = 1): ReleasedPosition {
-  return { startFen: game.startFen, actual: boardFrame(replay(decoded.moves, game.startFen)),
+  const board = replay(decoded.moves, game.startFen);
+  return { ...(decoded.anchors && { clocks: decoded.anchors }), startFen: game.startFen, actual: boardFrame(board),
     moves: decoded.moves, opening: decoded.opening, elapsed: decoded.elapsed, revision,
     summary: { ...gameSummary(decoded), observedAt: new Date(now).toISOString() } };
 }

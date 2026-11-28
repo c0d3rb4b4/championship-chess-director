@@ -4,12 +4,22 @@ export interface CataloguePlayer {
   country?: string;
 }
 
+export interface TimeControl {
+  startingMs: number;
+  incrementMs: number;
+  incrementFromMove: number;
+  bonuses: { afterMove: number; ms: number }[];
+}
+
 export interface RoundBinding {
   roundId: string;
   chapterId: string;
   pgnRound: string;
   events: string[];
   sessePlayers?: { white: string; black: string };
+  timeControl?: TimeControl;
+  clockConvention?: "post-move";
+  leelaFields?: { rootWdl?: true; evaluationVisits?: true };
   elapsedTime?: "pgn-emt";
 }
 

@@ -88,6 +88,8 @@ export function interruptPanel(programme: HTMLElement, markup: string): void {
   const panel = programme.querySelector<HTMLElement>(".comparison-panel:not([data-departing])")!;
   const board = programme.querySelector<HTMLElement>(".actual-board-wrap")!;
   const from = pose(panel);
+  // Retire old-root content on the first frame; only the panel surface travels out.
+  if (programme.dataset.state === "underway") panel.replaceChildren();
   cutProgrammeMotion();
   panel.insertAdjacentHTML("beforebegin", markup);
   const next = panel.previousElementSibling as HTMLElement;
@@ -111,6 +113,9 @@ export function switchSpotlight(
   const leavingStart = pose(leaving);
   cutProgrammeMotion(leaving);
 
+  if (motion === "interruption" && programme.dataset.state === "underway") {
+    leaving.querySelectorAll(".analysis-board, .variation-rail").forEach(node => node.replaceChildren());
+  }
   actual.classList.toggle("large-actual", !spotlight);
   actual.classList.toggle("mini-actual", spotlight);
   board.classList.toggle("mini-board", spotlight);

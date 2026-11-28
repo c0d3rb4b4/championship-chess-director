@@ -42,7 +42,7 @@
       "startFen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       "white": {"id": "46616543", "name": "Gukesh D", "country": "IN"},
       "black": {"id": "14205483", "name": "Javokhir Sindarov", "country": "UZ"},
-      "binding": {"roundId": "wIwJtPqz", "chapterId": "IriXvwPw", "pgnRound": "4.1", "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
+      "binding": {"roundId": "wIwJtPqz", "chapterId": "IriXvwPw", "pgnRound": "4.1", "sessePlayers": {"white": "Gukesh D", "black": "Sindarov"}, "events": ["Salesforce FIDE World Championship 2026", "FIDE World Chess Championship Match"]}
     },
     {
       "id": "game-5",

@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import type { LiveDirector } from "./live-director.js";
 import type { DirectorState } from "./director.js";
 import type { Command, EngineId, LiveAnalysis, ReleasedPosition } from "../shared/types.js";
 
@@ -66,6 +67,18 @@ export class Store {
           PRAGMA user_version = 3;
         `);
       });
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS cadence_profile (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS journal_counts (epoch INTEGER PRIMARY KEY, rows INTEGER NOT NULL);
+        INSERT OR IGNORE INTO journal_counts SELECT epoch,count(*) FROM feed_events GROUP BY epoch;
+        CREATE TRIGGER IF NOT EXISTS count_feed_insert AFTER INSERT ON feed_events BEGIN
+          INSERT INTO journal_counts VALUES (NEW.epoch,1) ON CONFLICT(epoch) DO UPDATE SET rows=rows+1;
+        END;
+        CREATE TABLE IF NOT EXISTS direction_state (epoch INTEGER PRIMARY KEY, payload TEXT NOT NULL, seen_ms INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS direction_commands (id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, request TEXT NOT NULL,
+          due INTEGER NOT NULL, root TEXT, status TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS direction_due ON direction_commands(epoch, status, due);
+      `);
     } catch (error) {
       this.db.close();
       throw error;
@@ -121,7 +134,7 @@ export class Store {
         return prior.expected_epoch === expectedEpoch && prior.mode === mode && prior.game_id === gameId
           ? "duplicate" : "conflict";
       }
-      if (this.db.prepare("SELECT 1 FROM demo_commands WHERE id = ?").get(id)) return "conflict";
+      if (this.getCommand(id)) return "conflict";
       // Changing the target and invalidating its old summary must be one durable operation.
       const changed = this.db.prepare(`
         UPDATE active_selection SET mode = ?, game_id = ?, epoch = epoch + 1, summary = NULL
@@ -225,6 +238,84 @@ export class Store {
     return row?.due == null ? Infinity : Number(row.due);
   }
 
+  profile(): LiveDirector["state"]["profile"] | undefined {
+    const row = this.db.prepare("SELECT payload FROM cadence_profile WHERE id=1").get();
+    return row && JSON.parse(String(row.payload));
+  }
+
+  saveProfile(profile: LiveDirector["state"]["profile"]) {
+    this.db.prepare("INSERT OR REPLACE INTO cadence_profile VALUES (1,?)").run(JSON.stringify(profile));
+  }
+
+  latestIdentity(epoch: number) {
+    const row = this.db.prepare("SELECT identity FROM feed_events WHERE epoch=? AND source='authority' ORDER BY id DESC LIMIT 1").get(epoch);
+    return row && String(row.identity);
+  }
+
+  adoptIdentity(epoch: number, oldKey: string, key: string) {
+    this.db.prepare("UPDATE feed_events SET identity=? WHERE epoch=? AND identity=?").run(key,epoch,oldKey);
+  }
+
+  direction(epoch: number) {
+    const row = this.db.prepare("SELECT payload, seen_ms FROM direction_state WHERE epoch=?").get(epoch);
+    return row && { state: JSON.parse(String(row.payload)) as LiveDirector["state"], seen: Number(row.seen_ms) };
+  }
+
+  saveDirection(epoch: number, state: LiveDirector["state"], now: number) {
+    this.db.prepare("INSERT OR REPLACE INTO direction_state VALUES (?,?,?)").run(epoch, JSON.stringify(state), now);
+  }
+
+  // Start a fresh buffer under the same selected game. Never retime already released events.
+  refill(epoch: number, delay: number, state: LiveDirector["state"], now: number) {
+    const changed = this.db.prepare("UPDATE active_selection SET epoch=epoch+1, summary=NULL WHERE epoch=? AND mode='real'").run(epoch);
+    if (!changed.changes) throw Error("Selection changed");
+    this.sessionDelay(epoch + 1, delay);
+    this.saveDirection(epoch + 1, { ...state, key: "", spotlight: undefined, pinned: undefined }, now);
+  }
+
+  withTransaction<T>(op: () => T): T { return this.transaction(op); }
+
+  directionCommand(id: string) {
+    return this.db.prepare("SELECT epoch,request,status FROM direction_commands WHERE id=?").get(id);
+  }
+
+  queueControl(id: string, epoch: number, request: string, due: number, root: string | null) {
+    this.db.prepare("INSERT INTO direction_commands VALUES (?,?,?,?,?,'queued')").run(id, epoch, request, due, root);
+  }
+
+  dueControls(epoch: number, now: number) {
+    return this.db.prepare("SELECT id, request, root FROM direction_commands WHERE epoch=? AND status='queued' AND due<=? ORDER BY due,rowid")
+      .all(epoch, now);
+  }
+
+  finishControl(id: string, status: string) {
+    this.db.prepare("UPDATE direction_commands SET status=? WHERE id=?").run(status, id);
+  }
+
+  journalIntact(epoch: number) {
+    const row = this.db.prepare("SELECT rows, (SELECT count(*) FROM feed_events WHERE epoch=?) AS present FROM journal_counts WHERE epoch=?").get(epoch,epoch);
+    return !row || row.rows === row.present;
+  }
+
+  compact(now: number) {
+    this.transaction(() => {
+    // Keep the last released observation and the last pre-next-root score for each engine/root.
+    // Later tombstones and simultaneous next-root packets cannot erase historical evidence.
+    const removed = this.db.prepare(`DELETE FROM feed_events WHERE id IN (
+      SELECT e.id FROM feed_events e WHERE e.source IN ('sesse','leela') AND e.eligible_ms < ?
+      AND EXISTS (SELECT 1 FROM feed_events n WHERE n.root=e.root AND n.source=e.source
+        AND n.id>e.id AND n.eligible_ms < ? AND (e.payload='null' OR
+        (n.payload!='null' AND (json_extract(e.payload,'$.pawns') IS NULL OR json_extract(n.payload,'$.pawns') IS NOT NULL)
+         AND (json_extract(e.payload,'$.wdl') IS NULL OR json_extract(n.payload,'$.wdl') IS NOT NULL)
+         AND n.eligible_ms < COALESCE((SELECT MIN(a.eligible_ms) FROM feed_events a WHERE a.epoch=e.epoch
+          AND a.identity=e.identity AND a.source='authority' AND a.id>e.root),9223372036854775807))))) RETURNING epoch`).all(now-600000, now-600000);
+    const counts = new Map<number,number>();
+    for (const row of removed) counts.set(Number(row.epoch), 1 + (counts.get(Number(row.epoch)) ?? 0));
+    for (const [epoch, count] of counts)
+      this.db.prepare("UPDATE journal_counts SET rows=rows-? WHERE epoch=?").run(count, epoch);
+    });
+  }
+
   load(): DirectorState | undefined {
     const row = this.db
       .prepare("SELECT payload FROM demo_checkpoint WHERE id = 1")
@@ -245,6 +336,8 @@ export class Store {
       epoch: Number(row.epoch),
       selectionEpoch: row.selection_epoch === null ? undefined : Number(row.selection_epoch),
     };
+    const real = this.directionCommand(id);
+    if (real) return { command: "direction", epoch: Number(real.epoch) };
     const selection = this.db.prepare("SELECT expected_epoch FROM selection_commands WHERE id = ?").get(id);
     return selection ? { command: "select", epoch: Number(selection.expected_epoch) } : undefined;
   }

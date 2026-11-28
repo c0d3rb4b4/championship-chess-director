@@ -116,7 +116,9 @@ export function createBroadcastServer(options: {
         }
         let input: {
           id?: string;
-          command?: Command | "select-game" | "enter-demo" | "clear-selection";
+          command?: string;
+          value?: unknown;
+          root?: string;
           gameId?: string;
           selectionEpoch?: number;
           epoch?: number;
@@ -141,8 +143,10 @@ export function createBroadcastServer(options: {
         let duplicate: boolean;
         if (command === "select-game" || command === "enter-demo" || command === "clear-selection") {
           duplicate = output.select(id, command, selectionEpoch!, input.gameId);
-        } else if (command && commands.includes(command)) {
-          duplicate = output.cue(id, command, selectionEpoch!, input.epoch, input.revision);
+        } else if (command && ["hold","resume","delay","profile","auto","pause-auto","next","pin","feature","actual"].includes(command)) {
+          duplicate = output.control(id, selectionEpoch!, command, input.value, input.root);
+        } else if (command && commands.includes(command as Command)) {
+          duplicate = output.cue(id, command as Command, selectionEpoch!, input.epoch, input.revision);
         } else {
           json(res, 400, { error: "Unknown command" });
           return;

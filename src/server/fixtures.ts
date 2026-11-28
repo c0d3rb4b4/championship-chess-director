@@ -16,9 +16,9 @@ export function rootKey(
   gameId: string,
   epoch: number,
   revision: number,
-  moves: string[],
+  moves: string[], initial = DEFAULT_POSITION,
 ): string {
-  const game = replay(moves);
+  const game = replay(moves, initial);
   const uci = game
     .history({ verbose: true })
     .map((m) => m.from + m.to + (m.promotion ?? ""));
@@ -28,7 +28,7 @@ export function rootKey(
         gameId,
         epoch,
         revision,
-        initial: DEFAULT_POSITION,
+        initial,
         uci,
         fen: game.fen(),
       }),
@@ -53,8 +53,8 @@ export function boardFrame(game: Chess, move: Move | undefined = game.history({ 
     to: move?.to,
   };
 }
-export function variationFrames(root: string[], moves: string[]): BoardFrame[] {
-  const game = replay(root);
+export function variationFrames(root: string[], moves: string[], initial = DEFAULT_POSITION): BoardFrame[] {
+  const game = replay(root, initial);
   const frames = [boardFrame(game)];
   for (const move of moves) {
     game.move(move); // Fail closed: chess.js throws for every illegal move, including special moves.
