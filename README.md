@@ -22,6 +22,8 @@ A fresh install opens on **Awaiting game selection**. On `/operator`, choose a r
 
 The server polls the selected Lichess chapter every 15 seconds, backs off after failures, and retries after a result to pick up amendments. Both viewers and the preview share one connection to each enabled source. A move or explicit result updates the actual board independently of the engines. An authority interruption retains the last verified board. **Clear selection** returns every viewer to the neutral slate.
 
+A finished selection shows the final position for 30 seconds, then loops Game in numbers, any supported time and evaluation pages, and a labelled replay of the accepted moves. Cold archives and games that finish on air share this rundown. Viewers who join or reconnect see the current page and replay position.
+
 Set `PROGRAMME_DELAY_SECONDS=60` for a one-minute delay (default zero). The selected session keeps its delay across restarts. To change delay, clear the selection, restart with the new value and take the game again. A cold result waits in the buffer. A freshly validated previously released final can rejoin immediately when it covers the configured delay. PGN header dates and HTTP server dates do not establish move or result times.
 
 The control room shows the latest upstream read, engine status and the delayed programme preview. Enable Sesse for a verified round with `binding.sessePlayers` in the catalogue. The checked-in Game 3 aliases were verified on its archive. Game 4 still requires a producer to verify the round and Sesse names. Leela matches the advertised chapter and both FIDE IDs, then validates the subscribed ply, FEN and legal candidate. Clock conventions, Leela WDL and visit shares await in-play verification. The [provider contracts](docs/PROVIDER_CONTRACTS.md) track source checks and broadcast permissions.
@@ -72,7 +74,7 @@ The Chromium tests drive the actual operator buttons and two programme viewers. 
 
 The persistent Node/TypeScript server owns chess rules, a deterministic director, a SQLite WAL checkpoint/command journal and a shared ordered SSE stream. The browser renders validated board frames; it schedules no variation timers. Fixture score meanings and full history bindings are explicit. See [slice architecture and limits](docs/DEMO_SLICE.md) and [fixture contract](fixtures/README.md).
 
-The real selector and continuous delayed feed implement game-day G1 and G2. Post-game replay, countdowns and the production rehearsal follow in G3–G5. Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production semantics are deliberately unverified; no live dual-engine launch is implied.
+The real selector, continuous delayed feed and finished-game rundown implement game-day G1 through G3. The countdown and previous-game replay are G4. The production rehearsal is G5. Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production WDL is disabled pending in-play verification.
 
 - [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
 - [Game-day implementation plan and repeatable prompt](docs/GAME_DAY_PLAN.md) for choosing real championship games, countdowns, replays and post-game statistics.

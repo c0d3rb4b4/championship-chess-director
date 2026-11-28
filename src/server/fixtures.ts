@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Chess, DEFAULT_POSITION } from "chess.js";
+import { Chess, DEFAULT_POSITION, type Move } from "chess.js";
 import demo from "../../fixtures/demo-game.json" with { type: "json" };
 import sesse from "../../fixtures/sesse.json" with { type: "json" };
 import leela from "../../fixtures/leela.json" with { type: "json" };
@@ -35,8 +35,7 @@ export function rootKey(
     )
     .digest("hex");
 }
-export function boardFrame(game: Chess): BoardFrame {
-  const move = game.history({ verbose: true }).at(-1);
+export function boardFrame(game: Chess, move: Move | undefined = game.history({ verbose: true }).at(-1)): BoardFrame {
   return {
     fen: game.fen(),
     pieces: game

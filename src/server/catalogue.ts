@@ -25,12 +25,14 @@ function binding(value: unknown): RoundBinding | null {
   const b = record(value, "binding");
   if (!Array.isArray(b.events) || !b.events.length) throw Error("Missing verified PGN Event headers");
   const aliases = b.sessePlayers === undefined ? undefined : record(b.sessePlayers, "Sesse mapping");
+  if (b.elapsedTime !== undefined && b.elapsedTime !== "pgn-emt") throw Error("Invalid elapsed-time convention");
   return {
     ...(aliases && { sessePlayers: { white: string(aliases.white, "Sesse White"), black: string(aliases.black, "Sesse Black") } }),
     roundId: string(b.roundId, "Lichess round ID", /^[A-Za-z0-9]{8}$/),
     chapterId: string(b.chapterId, "Lichess chapter ID", /^[A-Za-z0-9]{8}$/),
     pgnRound: string(b.pgnRound, "PGN Round"),
     events: b.events.map(event => string(event, "PGN Event")),
+    ...(b.elapsedTime && { elapsedTime: b.elapsedTime }),
   };
 }
 

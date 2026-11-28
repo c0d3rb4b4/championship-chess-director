@@ -1,5 +1,5 @@
 import { escape as e } from "./board.js";
-import type { ProgrammeSnapshot } from "../shared/types.js";
+import type { FinishedRecap, ProgrammeSnapshot } from "../shared/types.js";
 
 const colours = ["#f5f2e9", "#a4c9da", "#e4ac76"];
 const number = (value: number) => value.toLocaleString("en-GB", { maximumFractionDigits: 2 });
@@ -70,4 +70,42 @@ export function statisticsPanel(s: ProgrammeSnapshot, outcome: (v: [number,numbe
       ${chart(labels,["White win","Draw","Black win"].map((name,i) => ({name,values:rows.map(r => r.leela?.percentages[i] ?? null)})), "Leela · Probability (%)",100)}`;
   }
   return `<article class="stat-panel" data-panel="${s.panel}">${body}</article>`;
+}
+
+export function recapTime(recap: FinishedRecap): string {
+  const series = (["w", "b"] as const).map((colour, index) => {
+    let total = 0;
+    let visible = true;
+    const values = recap.samples.map(sample => {
+      if (sample.mover === colour) {
+        visible = sample.elapsedMs !== undefined;
+        total += sample.elapsedMs ?? 0;
+      }
+      return visible ? total / 60_000 : null;
+    });
+    return { name: index === 0 ? "White" : "Black", values };
+  });
+  const totals = [recap.white, recap.black];
+  return `<section class="recap-stats"><h2>Time used</h2>
+    <div class="recap-time-totals">${series.map((line, i) => {
+      const side = totals[i];
+      return `<div><span>${line.name} · ${side.timedMoves}/${side.moves} moves timed</span>
+        <strong>${side.timedMoves ? `${number(side.totalMs / 1000)} s` : "—"}</strong>
+        ${side.longest ? `<small>Longest ${side.timedMoves < side.moves ? "observed " : ""}think · ${e(side.longest.label)} · ${number(side.longest.elapsedMs / 1000)} s</small>` : ""}
+      </div>`;
+    }).join("")}</div>
+    ${chart(recap.samples.map(sample => sample.label), series, "Recorded cumulative minutes")}
+    <p class="axis-label">Played move</p></section>`;
+}
+
+export function recapEvaluation(recap: FinishedRecap): string {
+  const labels = recap.samples.map(sample => sample.label);
+  const pawns = recap.samples.map(sample => sample.pawns ?? null);
+  const wdl = ["White win", "Draw", "Black win"].map((name, i) => ({
+    name, values: recap.samples.map(sample => sample.wdl?.[i] ?? null),
+  }));
+  return `<section class="recap-stats"><h2>Evaluation history</h2><p class="recap-sub">Observed during play</p>
+    ${pawns.some(value => value !== null) ? chart(labels, [{ name: "Stockfish · Sesse", values: pawns }], "White evaluation · pawns") : ""}
+    ${wdl[0].values.some(value => value !== null) ? chart(labels, wdl, "Leela · Probability (%)", 100) : ""}
+    <p class="axis-label">Played move</p></section>`;
 }
