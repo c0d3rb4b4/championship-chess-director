@@ -1,0 +1,58 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const directory = "test-results/provider-screenshots";
+const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const report = [
+  "# Match-day rehearsal",
+  "",
+  `Tested commit \`${commit}\`. All images and clips use fixture inputs.`,
+  "",
+  "| Programme | 1920 × 1080 | 1280 × 720 |",
+  "|---|---|---|",
+];
+
+// Check the media itself so a missing scene, truncated encode or wrong viewport fails the job.
+function media(file, width, height) {
+  const probe = JSON.parse(execFileSync("ffprobe", ["-v", "error", "-show_streams", "-of", "json",
+    join(directory, file)], { encoding: "utf8" }));
+  const [video] = probe.streams;
+  if (probe.streams.length !== 1 || video.codec_type !== "video" || video.width !== width || video.height !== height ||
+      (file.endsWith(".mp4") && (video.codec_name !== "h264" || !(Number(video.duration) > 0)))) {
+    throw Error(`Unexpected media format for ${file}`);
+  }
+  return `[${file.split("/").pop()}](${file})`;
+}
+
+for (const [label, stem] of [
+  ["Countdown with previous replay", "g4/waiting-ply-2"],
+  ["Countdown without predecessor", "g4/game-1-no-predecessor"],
+  ["Released live position", "g2/live"],
+  ["Conclusion", "g3/result"],
+  ["Game in numbers", "g3/numbers"],
+  ["Time used", "g3/time"],
+  ["Evaluation history", "g3/evaluation"],
+  ["Mid-replay promotion", "g3/replay"],
+]) {
+  report.push(`| ${label} | ${media(stem + "-1080.jpg", 1920, 1080)} | ${media(stem + "-720.jpg", 1280, 720)} |`);
+}
+
+report.push("", "## Silent transitions", "");
+for (const name of ["g4-opening-takeover", "g2-confirmed-result", "g3-result-to-recap"]) {
+  report.push("- " + media(`videos/${name}-720p.mp4`, 1280, 720));
+}
+
+report.push("", "## Eligible release to browser paint (ms)", "",
+  "| Transition | Delay | 1080p | 720p | Preview |", "|---|---|---|---|---|");
+for (const [label, folder] of [["Opening", "g4"], ["Final move and result", "g5/result"]]) {
+  for (const delay of [0, 60]) {
+    const file = `${folder}/paint-D${delay}.json`;
+    const { hd, sd, preview } = JSON.parse(readFileSync(join(directory, file), "utf8"));
+    if (![hd, sd, preview].every(ms => Number.isFinite(ms) && ms >= 0 && ms < 500)) {
+      throw Error(`Missing or late paint in ${file}`);
+    }
+    report.push(`| [${label}](${file}) | ${delay} s | ${hd} | ${sd} | ${preview} |`);
+  }
+}
+writeFileSync(join(directory, "MATCH-DAY.md"), report.join("\n") + "\n");

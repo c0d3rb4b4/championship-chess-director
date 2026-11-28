@@ -34,6 +34,15 @@ SQLite stores the selection, receipt and release times, accepted mainlines and r
 
 Before play, the selected pairing and countdown share the programme with the latest earlier completed round whose score is eligible. At zero, the programme waits for a verified first move. A round without a playable predecessor keeps the static waiting layout. A confirmed first move or result takes over on the same timeline used by the operator preview and OBS.
 
+## Match-day runbook
+
+1. For a private rehearsal, start a separate local instance with its own database and port. For example, run `PORT=3100 BROADCAST_DB=data/rehearsal.sqlite npm run dev`. Open that port's `/operator` and `/programme`. For a public take, first confirm the source permissions, required delay and production-host checks in the [release record](docs/evidence/game-day-g5/README.md#public-broadcast-readiness).
+2. Confirm the round, start time, White/Black assignments and authority binding. Check the configured delay before taking the game. Browse a round, then click **Take Game N to programme**. Check the embedded preview against the OBS programme source. Demo cues require **Enter demo rehearsal**.
+3. Before play, identify the selected pairing and countdown on the right. The previous replay carries its own round, result and colours on the left. Game 1 has no previous board. At zero, wait for the first eligible move. If the feed is unavailable, check the control-room diagnostic and retain the last verified position.
+4. During play, compare the actual board and move list with the selected chapter on the delayed timeline. The control room can report a newer upstream read. Let coverage continue on the move authority when either engine lacks a verified matching root. Check an unexpected colour, chapter or result against the binding before taking another game.
+5. At the confirmed result, check the final position and the 30-second hold. Watch Game in numbers, available charts and the labelled replay. Selecting a completed round cold follows the same rundown after its result becomes eligible. To leave the recap, explicitly take the next round or **Clear selection**.
+6. To repeat the fixture rehearsal locally, run `npm ci`, `npx playwright install --with-deps --no-shell chromium` and `npm run screenshots:providers`. For encoded clips, use the PR/main **Provider simulation screenshots** artifact and open `MATCH-DAY.md`. Record the tested SHA when signing off. For a deployed check, keep the source recording under ignored `data/` and use the [capture and replay instructions](docs/PROVIDER_CONTRACTS.md#record-a-deployed-round).
+
 ## Watch the demo
 
 Open both routes. Click **Enter demo rehearsal** in the operator view, then **Restart demo**. The fixture follows this sequence.
@@ -76,7 +85,7 @@ The Chromium tests drive the actual operator buttons and two programme viewers. 
 
 The persistent Node/TypeScript server owns chess rules, a deterministic director, a SQLite WAL checkpoint/command journal and a shared ordered SSE stream. The browser renders validated board frames; it schedules no variation timers. Fixture score meanings and full history bindings are explicit. See [slice architecture and limits](docs/DEMO_SLICE.md) and [fixture contract](fixtures/README.md).
 
-The real selector, continuous delayed feed, finished-game rundown, and pre-game countdown and replay implement game-day G1 through G4. The production rehearsal is G5. Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production WDL is disabled pending in-play verification.
+The real selector, continuous delayed feed, finished-game rundown, and pre-game countdown and replay implement game-day G1 through G4. G5 adds the [match-day rehearsal and release record](docs/evidence/game-day-g5/README.md). Producer profiles, remote authentication and the eight-hour/OBS performance gates remain open. Leela production WDL is disabled pending in-play verification.
 
 - [Phased development plan and next implementation tasks](docs/PHASED_PLAN.md)
 - [Game-day implementation plan and repeatable prompt](docs/GAME_DAY_PLAN.md) for choosing real championship games, countdowns, replays and post-game statistics.

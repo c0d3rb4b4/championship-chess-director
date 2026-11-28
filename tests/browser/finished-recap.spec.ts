@@ -12,7 +12,7 @@ import { finalResult, sans, score, startFen } from "../finished-game.js";
 // Keep the video recorder first so the transition clips use the full 720p viewport.
 test.use({ trace: { mode: "retain-on-failure", screenshots: false } });
 const directory = "test-results/provider-screenshots";
-test("finished-game rundown, replay and recovery through the shared programme", { tag: "@review-captures" },
+test("match-day rehearsal from countdown through replay, including cold selection and recovery", { tag: "@review-captures" },
     async ({ browser, playwright, channel }) => {
   test.setTimeout(60_000);
   const temp = await mkdtemp(join(tmpdir(), "finished-recap-"));
@@ -25,10 +25,11 @@ test("finished-game rundown, replay and recovery through the shared programme", 
   live.binding!.sessePlayers = { white: live.white.name, black: live.black.name };
   live.binding!.elapsedTime = "pgn-emt";
   delete archive.binding!.sessePlayers;
+  live.scheduledStart = "2026-11-29T12:01:00Z";
   await writeFile(cataloguePath, JSON.stringify(catalogue));
 
   let now = Date.parse("2026-11-29T12:00:00Z");
-  let livePly = 1, liveResult = "*", delayMs = 0;
+  let livePly = 0, liveResult = "*", delayMs = 0;
   const start = () => createBroadcastServer({
     dbPath, publicDir: resolve("dist/public"), cataloguePath, delayMs, wallNow: () => now,
     async request(input) {
@@ -94,8 +95,18 @@ test("finished-game rundown, replay and recovery through the shared programme", 
       expect(layout.scrollWidth).toBe(layout.viewportWidth);
       await page.screenshot({ path: `${directory}/g3/${name}-${layout.viewport}.jpg`, quality: 88, animations: "disabled" });
     };
-    const stills = (name: string) => Promise.all([capture(hd, name), capture(sd, name)]);
+    const rundown = async () => {
+      const { summary, recap } = await snapshot();
+      return { result: summary?.result, page: recap?.page, white: recap?.white, black: recap?.black,
+        replay: recap?.replay };
+    };
+    const firstPass = new Map<number, Awaited<ReturnType<typeof rundown>>>();
+    const stills = async (name: string) => {
+      firstPass.set(now - finishedAt, await rundown());
+      await Promise.all([capture(hd, name), capture(sd, name)]);
+    };
 
+    // Take the archive cold before the next round begins on this same server.
     const cold = now;
     await take(archive);
     await showing(archive.id, "result");
@@ -114,6 +125,14 @@ test("finished-game rundown, replay and recovery through the shared programme", 
     await showing(archive.id, "replay", 2);
 
     await take(live);
+    await Promise.all(view.map(async output => {
+      await expect(output).toHaveAttribute("data-state", "waiting");
+      await expect(output).toHaveAttribute("data-game-id", live.id);
+      await expect(output).toHaveAttribute("data-replay-game", archive.id);
+      await expect(output.getByRole("timer")).toBeVisible();
+    }));
+    livePly = 1;
+    tick(now + 15_000);
     const pendingAt = now;
     await Promise.all(view.map(output => expect(output).toHaveAttribute("data-state", "underway")));
     await expect(view[0].getByText("White eval · pawns")).toBeVisible();
@@ -182,9 +201,17 @@ test("finished-game rundown, replay and recovery through the shared programme", 
     await sd.waitForTimeout(700);
     await sd.screencast.stop();
 
+    // Reconstruct the same game from its SQLite journal and compare the second rundown.
+    await app.close(); app = start(); await listen(port);
+    for (const [offset, expected] of firstPass) {
+      tick(finishedAt + 88_000 + offset);
+      await showing(live.id, expected.page!, expected.replay?.ply);
+      expect(await rundown()).toEqual(expected);
+    }
+
     // Withdraw the scored result during replay, then check a delayed completed take after restart.
-    tick(finishedAt + 162_000);
-    await showing(live.id, "replay", 1);
+    tick(finishedAt + 168_000);
+    await showing(live.id, "replay", 4);
     liveResult = "*";
     tick(now + 15_000);
     await Promise.all(view.map(output => expect(output).toHaveAttribute("data-state", "underway")));
