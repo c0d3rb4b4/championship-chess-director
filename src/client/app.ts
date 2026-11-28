@@ -1,4 +1,4 @@
-import { authorityLabels, lastMoveLabel, realProgramme, roundStates, startLabel } from "./game-day.js";
+import { pawnEstimate, authorityLabels, lastMoveLabel, realProgramme, roundStates, startLabel } from "./game-day.js";
 import { statisticsPanel } from "./statistics.js";
 import { board, escape as e } from "./board.js";
 import { cutProgrammeMotion, interruptPanel, reducedMotion, revealPanel, switchSpotlight } from "./programme-motion.js";
@@ -53,15 +53,6 @@ function outcomeEstimate(values: [number, number, number], candidate?: string): 
     <div class="wdl-values">${values.map((value, i) => `<div><span>${labels[i]}</span><strong>${value}%</strong></div>`).join("")}</div>
     <div class="wdl-bar" aria-hidden="true">${values.map((value) => `<i style="width:${value}%"></i>`).join("")}</div>
   </div>`;
-}
-
-function pawnEstimate(pawns: number, score: string): string {
-  // The centre is equal and each half covers five pawns.
-  const whiteShare = 50 + Math.max(-5, Math.min(5, pawns)) * 10;
-  return `<div class="pawn-score">
-      <div><span>White eval · pawns</span><strong>${e(score)}</strong></div>
-      <div class="pawn-bar" aria-hidden="true"><i style="width:${whiteShare}%"></i></div>
-    </div>`;
 }
 
 function engineSheet(engine: EngineView): string {
@@ -269,6 +260,10 @@ function operatorShell(): void {
             <dt>Black</dt><dd id="black-player">—</dd>
             <dt>Last move</dt><dd id="actual-position">—</dd>
             <dt data-real hidden>Scheduled start</dt><dd data-real id="selected-start" hidden>—</dd>
+            <dt data-real hidden>Programme delay</dt><dd data-real id="programme-delay" hidden>—</dd>
+            <dt data-real hidden>Latest authority read</dt><dd data-real id="latest-read" hidden>—</dd>
+            <dt data-real hidden>Sesse upstream</dt><dd data-real id="sesse-health" hidden>—</dd>
+            <dt data-real hidden>Leela upstream</dt><dd data-real id="leela-health" hidden>—</dd>
             <dt data-real hidden>Authority</dt><dd data-real id="authority-status" hidden>—</dd>
           </dl>
           <p class="binding-diagnostic" id="binding-diagnostic" hidden></p>
@@ -412,6 +407,11 @@ function showDetails(details: BroadcastOperator): void {
       ...details.catalogue.games.map(game => new Option(game.label, game.id)));
     select.value = selected ?? "";
   }
+  const health = details.feedHealth;
+  setText("#programme-delay", health ? `${health.delayMs / 1000} s` : "—");
+  setText("#latest-read", health?.lastRead ? new Date(health.lastRead).toLocaleTimeString() : "—");
+  setText("#sesse-health", health?.sesse ?? "—");
+  setText("#leela-health", health?.leela ?? "—");
   setText("#authority-status", authorityLabels[details.authorityStatus]);
   const diagnostic = app.querySelector<HTMLElement>("#binding-diagnostic")!;
   diagnostic.hidden = !details.diagnostic;
@@ -564,10 +564,13 @@ function accept(s: BroadcastSnapshot): void {
   } else if (s.mode === "DEMO") {
     renderProgramme(s);
   } else {
-    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.summary]);
+    const key = JSON.stringify([s.selectionEpoch, s.state, s.eventName, s.timeZone, s.game, s.position, s.analysis, s.interrupted, s.summary]);
     if (key !== renderKey) {
       renderKey = key;
       app.innerHTML = realProgramme(s, connected);
+      if (previous?.mode === "REAL" && !newStream && connected && !recovering &&
+          previous.selectionEpoch === s.selectionEpoch && previous.position?.actual.fen !== s.position?.actual.fen)
+        app.querySelector(".live-round")?.classList.add("released-move");
       resizeProgramme();
     }
   }
@@ -591,7 +594,10 @@ async function resnapshot(): Promise<void> {
     recovering = false;
   }
 }
-if (operator) operatorShell();
+if (operator) {
+  operatorShell();
+  setInterval(() => { if (connected && latest?.mode === "REAL") void operatorDetails(); }, 3000);
+}
 resizeProgramme();
 addEventListener("resize", resizeProgramme);
 void resnapshot();

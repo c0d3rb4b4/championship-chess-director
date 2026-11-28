@@ -48,7 +48,7 @@ export function boardFrame(game: Chess): BoardFrame {
       ),
     san: move?.san ?? "",
     moveLabel: move
-      ? `${Math.ceil(game.history().length / 2)}.${move.color === "b" ? ".." : ""}${move.san}`
+      ? `${move.before.split(" ")[5]}.${move.color === "b" ? ".." : ""}${move.san}`
       : "Initial position",
     from: move?.from,
     to: move?.to,

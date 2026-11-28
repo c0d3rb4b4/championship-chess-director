@@ -108,6 +108,21 @@ export interface HistoryRow {
 
 import type { Catalogue, CatalogueGame, GameSummary } from "./catalogue.js";
 
+export interface ReleasedPosition {
+  actual: BoardFrame;
+  moves: string[];
+  startFen: string;
+  revision: number;
+  summary: GameSummary & { observedAt: string };
+}
+
+export interface LiveAnalysis {
+  line: string[];
+  depth?: number;
+  whiteScore?: string;
+  pawns?: number;
+}
+
 export interface RealProgramme {
   mode: "REAL";
   streamId?: string;
@@ -116,7 +131,10 @@ export interface RealProgramme {
   eventName: string;
   timeZone: string;
   game: Omit<CatalogueGame, "binding" | "startFen"> | null;
-  state: "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable";
+  state: "unselected" | "pending" | "waiting" | "underway" | "finished" | "unavailable" | "buffering";
+  position?: ReleasedPosition;
+  interrupted?: boolean;
+  analysis?: Partial<Record<EngineId, LiveAnalysis>>;
   summary: (GameSummary & { observedAt: string }) | null;
 }
 
@@ -125,6 +143,7 @@ export type BroadcastSnapshot = RealProgramme | (ProgrammeSnapshot & { selection
 export interface SelectionControls {
   selectionEpoch: number;
   catalogue: Catalogue;
+  feedHealth?: { delayMs: number; lastRead: string | null; sesse: string; leela: string };
   authorityStatus: "idle" | "pending-binding" | "loading" | "verified" | "mismatch" | "unavailable";
   diagnostic: string | null;
 }

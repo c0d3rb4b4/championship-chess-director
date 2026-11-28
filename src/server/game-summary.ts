@@ -3,6 +3,9 @@ import { decodeGame } from "./providers/game.js";
 import type { CatalogueGame, GameSummary, RoundBinding } from "../shared/catalogue.js";
 
 export class BindingError extends Error {}
+export class AuthorityHttpError extends Error {
+  constructor(readonly status: number) { super(`Lichess returned HTTP ${status}`); }
+}
 
 function boundChapter(link: string, binding: RoundBinding): boolean {
   const url = URL.parse(link);
@@ -28,7 +31,7 @@ function selectChapter(body: string, binding: RoundBinding) {
   return matches[0];
 }
 
-export function decodeGameSummary(game: CatalogueGame, body: string): GameSummary {
+export function decodeBoundGame(game: CatalogueGame, body: string) {
   const { binding } = game;
   if (!binding) throw new BindingError("Game has no verified Lichess binding");
   const { pgn, headers, movetext } = selectChapter(body, binding);
@@ -49,24 +52,34 @@ export function decodeGameSummary(game: CatalogueGame, body: string): GameSummar
   }
 
   try {
-    const decoded = decodeGame({
+    return decodeGame({
       authority: "lichess", gameId: binding.chapterId, event, round: binding.pgnRound,
       whiteId: game.white.id, blackId: game.black.id, startFen: game.startFen, clockConvention: "unknown",
     }, "lichess", binding.chapterId, pgn);
-    return {
-      plies: decoded.moves.length, lastSan: decoded.moves.at(-1) ?? null,
-      fen: decoded.fen, result: result === "*" ? null : result,
-    };
   } catch {
     throw new BindingError("PGN identity, colours or legal mainline failed verification");
   }
 }
 
-export async function fetchGameSummary(game: CatalogueGame, signal: AbortSignal, request = fetch): Promise<GameSummary> {
+export function gameSummary(decoded: ReturnType<typeof decodeBoundGame>): GameSummary {
+  return { plies: decoded.moves.length, lastSan: decoded.moves.at(-1) ?? null, fen: decoded.fen,
+    result: decoded.result as GameSummary["result"] ?? null };
+}
+
+export function decodeGameSummary(game: CatalogueGame, body: string) {
+  return gameSummary(decodeBoundGame(game, body));
+}
+
+export async function fetchGameRecord(game: CatalogueGame, signal: AbortSignal, request = fetch) {
   if (!game.binding) throw new BindingError("Game has no verified Lichess binding");
   const roundId = game.binding.roundId;
   const url = `https://lichess.org/api/broadcast/round/${roundId}.pgn?clocks=true&comments=false`;
   const response = await request(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]) });
-  if (!response.ok) throw Error(`Lichess returned HTTP ${response.status}`);
-  return decodeGameSummary(game, await response.text());
+  if (!response.ok) throw new AuthorityHttpError(response.status);
+  const pgn = await response.text();
+  return { decoded: decodeBoundGame(game, pgn), pgn };
+}
+
+export async function fetchGameSummary(game: CatalogueGame, signal: AbortSignal, request = fetch) {
+  return gameSummary((await fetchGameRecord(game, signal, request)).decoded);
 }

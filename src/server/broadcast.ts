@@ -2,15 +2,13 @@ import { randomUUID } from "node:crypto";
 import type { BroadcastOperator, BroadcastSnapshot, Command, RealProgramme, SelectionControls } from "../shared/types.js";
 import type { Catalogue, CatalogueGame } from "../shared/catalogue.js";
 import { loadCatalogue, parseCatalogue } from "./catalogue.js";
-import { BindingError, fetchGameSummary } from "./game-summary.js";
+import { GameFeed, type FeedOptions } from "./game-feed.js";
 import { Director } from "./director.js";
 import type { Selection, Store } from "./store.js";
 
 export type SelectionCommand = "select-game" | "enter-demo" | "clear-selection";
-export interface BroadcastOptions {
+export interface BroadcastOptions extends FeedOptions {
   now?: () => number;
-  wallNow?: () => number;
-  request?: typeof fetch;
   cataloguePath?: string;
   startInDemo?: boolean;
 }
@@ -19,22 +17,17 @@ export class CommandError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-type VerifiedSummary = NonNullable<RealProgramme["summary"]>;
-interface SavedSummary { identity: string; summary: VerifiedSummary }
-
 function identity(catalogue: Catalogue, game: CatalogueGame) {
   return JSON.stringify([catalogue.eventId, game.id, game.white.id, game.black.id, game.startFen, game.binding]);
 }
 
-/** One shared selection and one authority read per take, independent of SSE subscriber count. */
+/** One shared selection and one authority session per take, independent of SSE subscriber count. */
 export class Broadcast {
   private readonly catalogue: Catalogue;
   private readonly catalogueWarning: string | null;
   private selection: Selection;
-  private summary: VerifiedSummary | null = null;
-  private status: SelectionControls["authorityStatus"] = "idle";
-  private diagnostic: string | null = null;
-  private read?: AbortController;
+  private feed?: GameFeed;
+  private legacySummary: RealProgramme["summary"] = null;
   private sequence = 0;
   private readonly streamId = randomUUID();
   private director?: Director;
@@ -44,6 +37,7 @@ export class Broadcast {
   current!: BroadcastSnapshot;
 
   constructor(private readonly store: Store, private readonly options: BroadcastOptions, private readonly publish: () => void) {
+    if (!Number.isSafeInteger(options.delayMs ?? 0) || (options.delayMs ?? 0) < 0) throw Error("Invalid programme delay");
     this.selection = store.loadSelection();
     const cached = store.loadCatalogue<Catalogue>();
     let catalogue: Catalogue;
@@ -77,12 +71,10 @@ export class Broadcast {
   private wallNow() { return (this.options.wallNow ?? Date.now)(); }
 
   private activate() {
-    this.read?.abort();
-    this.read = undefined;
+    this.feed?.stop();
+    this.feed = undefined;
+    this.legacySummary = null;
     this.director = undefined;
-    this.summary = null;
-    this.diagnostic = null;
-    this.status = "idle";
     if (this.selection.mode === "demo") {
       this.director = new Director(this.store.load());
       this.baseMs = this.director.checkpoint().elapsedMs;
@@ -93,40 +85,28 @@ export class Broadcast {
     }
     const game = this.game;
     if (game?.binding) {
-      const cached = this.store.loadSummary<SavedSummary>(this.selection.epoch, game.id);
-      if (cached?.identity === identity(this.catalogue, game)) this.summary = cached.summary;
-      this.status = "loading";
-      this.read = new AbortController();
-      void this.readAuthority(game, this.selection.epoch, this.read);
-    } else if (game) this.status = "pending-binding";
-    this.current = this.realSnapshot();
-  }
-
-  private async readAuthority(game: CatalogueGame, epoch: number, read: AbortController) {
-    try {
-      const record = await fetchGameSummary(game, read.signal, this.options.request);
-      if (read.signal.aborted) return;
-      const summary = { ...record, observedAt: new Date(this.wallNow()).toISOString() };
-      if (!this.store.saveSummary(epoch, game.id, { identity: identity(this.catalogue, game), summary })) return;
-      this.summary = summary;
-      this.status = "verified";
-    } catch (error) {
-      if (read.signal.aborted) return;
-      this.status = error instanceof BindingError ? "mismatch" : "unavailable";
-      this.diagnostic = error instanceof Error ? error.message : "Authority summary unavailable";
+      this.feed = new GameFeed(this.store, this.selection.epoch, identity(this.catalogue, game), game, this.options);
+      // G1 saved a verified summary without a move journal. Preserve its timestamped slate
+      // at zero delay until the first full authority read can supply the actual board.
+      if (!this.feed.delay) {
+        const { sessePlayers, ...oldBinding } = game.binding;
+        const saved = this.store.loadSummary<{ identity: string; summary: RealProgramme["summary"] }>(this.selection.epoch, game.id);
+        if (saved?.identity === identity(this.catalogue, { ...game, binding: oldBinding })) this.legacySummary = saved.summary;
+      }
     }
     this.current = this.realSnapshot();
-    this.publish();
   }
 
   private realState(): RealProgramme["state"] {
     const game = this.game;
     if (!game) return "unselected";
-    if (this.summary) {
-      if (this.summary.result) return "finished";
-      return this.summary.plies ? "underway" : "waiting";
-    }
-    if (game.scheduledStart && this.wallNow() >= Date.parse(game.scheduledStart)) return "unavailable";
+    const released = this.feed?.released;
+    const summary = released?.position?.summary ?? this.legacySummary;
+    if (summary?.result) return "finished";
+    if (summary?.plies) return "underway";
+    if (summary && !released?.interrupted) return "waiting";
+    if (this.feed?.delay && !summary && !released?.interrupted) return "buffering";
+    if (game.scheduledStart && this.wallNow() - (this.feed?.delay ?? 0) >= Date.parse(game.scheduledStart)) return "unavailable";
     return "pending";
   }
 
@@ -137,7 +117,7 @@ export class Broadcast {
       eventName: this.catalogue.eventName, timeZone: this.catalogue.timeZone,
       game: game ? { id: game.id, label: game.label, order: game.order, scheduledStart: game.scheduledStart,
         white: game.white, black: game.black } : null,
-      state: this.realState(), summary: this.summary,
+      state: this.realState(), ...this.feed?.released, summary: this.feed?.released.position?.summary ?? this.legacySummary,
     };
   }
 
@@ -150,16 +130,18 @@ export class Broadcast {
         this.persistedSecond = second;
       }
       this.current = { ...next, streamId: this.streamId, selectionEpoch: this.selection.epoch, sequence: ++this.sequence };
-    } else if (this.current.mode === "REAL" && this.current.state !== this.realState()) {
+    } else if (this.current.mode === "REAL" && (this.feed?.tick() || this.current.state !== this.realState())) {
       this.current = this.realSnapshot();
     }
     return this.current;
   }
 
   operator(): BroadcastOperator {
-    const controls = {
+    const controls: SelectionControls = {
       catalogue: this.catalogue, selectionEpoch: this.selection.epoch,
-      authorityStatus: this.status, diagnostic: [this.catalogueWarning, this.diagnostic].filter(Boolean).join(" ") || null,
+      authorityStatus: this.feed?.status ?? (this.game ? "pending-binding" : "idle"),
+      ...(this.feed && { feedHealth: { delayMs: this.feed.delay, lastRead: this.feed.lastRead, ...this.feed.sources } }),
+      diagnostic: [this.catalogueWarning, this.feed?.diagnostic].filter(Boolean).join(" ") || null,
     };
     if (this.current.mode === "REAL") return { ...controls, programme: this.current };
     return { ...controls, ...this.director!.operator(this.current, this.store.count) };
@@ -209,7 +191,7 @@ export class Broadcast {
   }
 
   stop() {
-    this.read?.abort();
+    this.feed?.stop();
     if (this.director) this.store.save(this.director.checkpoint());
   }
 }

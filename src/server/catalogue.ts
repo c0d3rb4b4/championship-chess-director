@@ -16,14 +16,17 @@ function string(value: unknown, field: string, pattern?: RegExp): string {
 
 function player(value: unknown): CataloguePlayer {
   const p = record(value, "player");
-  return { id: string(p.id, "FIDE player ID", /^[1-9]\d*$/), name: string(p.name, "player name") };
+  return { id: string(p.id, "FIDE player ID", /^[1-9]\d*$/), name: string(p.name, "player name"),
+    ...(p.country !== undefined && { country: string(p.country, "country code", /^[A-Z]{2}$/) }) };
 }
 
 function binding(value: unknown): RoundBinding | null {
   if (value === null) return null;
   const b = record(value, "binding");
   if (!Array.isArray(b.events) || !b.events.length) throw Error("Missing verified PGN Event headers");
+  const aliases = b.sessePlayers === undefined ? undefined : record(b.sessePlayers, "Sesse mapping");
   return {
+    ...(aliases && { sessePlayers: { white: string(aliases.white, "Sesse White"), black: string(aliases.black, "Sesse Black") } }),
     roundId: string(b.roundId, "Lichess round ID", /^[A-Za-z0-9]{8}$/),
     chapterId: string(b.chapterId, "Lichess chapter ID", /^[A-Za-z0-9]{8}$/),
     pgnRound: string(b.pgnRound, "PGN Round"),
